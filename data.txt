@@ -1,0 +1,53 @@
+Wind:
+
+RAD1: https://spdf.gsfc.nasa.gov/pub/data/wind/waves/rad1_l2/
+RAD2: https://spdf.gsfc.nasa.gov/pub/data/wind/waves/rad2_l2/
+
+Not at CDAWeb!
+
+
+STEREO:
+
+HFR: https://spdf.gsfc.nasa.gov/pub/data/stereo/ahead/l3/waves/hfr/
+LFR: https://spdf.gsfc.nasa.gov/pub/data/stereo/ahead/l3/waves/lfr/
+
+CDAWeb:
+STA_L3_WAV_HFR
+STA_L3_WAV_LFR
+
+
+PARKER:
+
+HFR: 
+https://spdf.gsfc.nasa.gov/pub/data/psp/fields/l3/rfs_hfr/
+https://research.ssl.berkeley.edu/data/psp/data/sci/fields/l3/rfs_hfr/
+
+LFR: 
+https://spdf.gsfc.nasa.gov/pub/data/psp/fields/l3/rfs_lfr/
+https://research.ssl.berkeley.edu/data/psp/data/sci/fields/l3/rfs_lfr/
+
+CDAWeb:
+PSP_FLD_L3_RFS_HFR
+PSP_FLD_L3_RFS_LFR
+
+from sunpy.net import Scraper
+from sunpy.time import TimeRange
+# sensor = 'rfs_lfr'  # 'rfs_lfr' or 'rfs_hfr'
+pattern = ('https://research.ssl.berkeley.edu/data/psp/data/sci/{instrument}/{level}/{sensor}/%Y/%m/psp_fld_{level}_{sensor}_%Y%m%d_v03.cdf')
+
+fields_lfr = Scraper(pattern, instrument='fields', level='l3', sensor='rfs_lfr')
+fields_hfr = Scraper(pattern, instrument='fields', level='l3', sensor='rfs_hfr')
+timerange = TimeRange('2024-01-01T00:08:00','2024-01-03T00:12:00')
+print(fields_lfr.filelist(timerange)) 
+
+
+
+ORBITER: (Don't ask me how its plotted XD)
+
+HFR: 
+https://spdf.gsfc.nasa.gov/pub/data/solar-orbiter/rpw/science/l2/hfr-surv/
+CDAWeb: SOLO_L2_RPW-HFR-SURV
+
+TNR: 
+https://spdf.gsfc.nasa.gov/pub/data/solar-orbiter/rpw/science/l2/tnr-surv/
+Not at CDAWeb (only LL02)
