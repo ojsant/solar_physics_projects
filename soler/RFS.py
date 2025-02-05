@@ -30,33 +30,28 @@ import cdaweb
 
 lfr_files = cdaweb.cdaweb_download_fido(dataset='PSP_FLD_L3_RFS_LFR', startdate="2019/04/17", enddate="2019/04/19")
 
-freq_lfr_all = np.array([])
+
+freq_lfr_2d  = cdflib.CDF(lfr_files[0]).varget("frequency_lfr_stokes")     # shape: (nTimeLFR, nFreqLFR)
+freq_lfr = freq_lfr_2d[0, :]  # Convert 2D -> 1D
+freq_lfr_mhz = freq_lfr / 1e6  # optional: Hz -> MHz
+psd_lfr_sfu_all = np.zeros((1, len(freq_lfr)))  # this is just to get the right shape for appending
 time_lfr_all = np.array([])
-psd_lfr_sfu_all = np.array([])
-freq_lfr_mhz_all = np.array([])
+
 
 for file in lfr_files:
     cdf_lfr = cdflib.CDF(file)
     time_lfr_ns  = cdf_lfr.varget("epoch_lfr_stokes")         # shape: (nTimeLFR,)
-    freq_lfr_2d  = cdf_lfr.varget("frequency_lfr_stokes")     # shape: (nTimeLFR, nFreqLFR)
     psd_lfr_sfu  = cdf_lfr.varget("psp_fld_l3_rfs_lfr_PSD_SFU") # shape: (nTimeLFR, nFreqLFR)
     # cdf_lfr.close()  # I think this is outdated
 
-    freq_lfr = freq_lfr_2d[0, :]  # Convert 2D -> 1D if needed
     # time_lfr_dt  = j2000_ns_to_datetime(time_lfr_ns)
     time_lfr_dt  = cdflib.epochs.CDFepoch.to_datetime(time_lfr_ns)
     time_lfr_mpl = mdates.date2num(time_lfr_dt)
-    freq_lfr_mhz = freq_lfr / 1e6  # optional: Hz -> MHz
+    
+    time_lfr_all = np.append(time_lfr_all, time_lfr_mpl)
+    psd_lfr_sfu_all = np.append(psd_lfr_sfu_all, psd_lfr_sfu, axis=0)
 
-    np.append(time_lfr_all, time_lfr_mpl)
-    np.append(freq_lfr_all, freq_lfr)
-    np.append(psd_lfr_sfu_all, psd_lfr_sfu)
-    np.append(freq_lfr_mhz_all, freq_lfr_mhz)
-
-# reshape sfu values into a (nTimeLFR, nFreqLFR) and reduce dimensions by one (for colormesh)
-
-psd_lfr_sfu_all = psd_lfr_sfu_all.reshape(len(time_lfr_all), len(freq_lfr_all))[:-1,:-1]
-
+psd_lfr_sfu_all = psd_lfr_sfu_all[1:,:]     # remove the zero row
 
 ###############################################################################
 # Load HFR data
@@ -65,41 +60,38 @@ psd_lfr_sfu_all = psd_lfr_sfu_all.reshape(len(time_lfr_all), len(freq_lfr_all))[
 
 hfr_files = cdaweb.cdaweb_download_fido(dataset='PSP_FLD_L3_RFS_HFR', startdate="2019/04/17", enddate="2019/04/19")
 
-freq_hfr_all = np.array([])
-freq_hfr_mhz_all = np.array([])
+freq_hfr_2d  = cdflib.CDF(hfr_files[0]).varget("frequency_hfr_stokes")     # shape: (nTimeHFR, nFreqHFR)
+freq_hfr = freq_hfr_2d[0, :]  # Convert 2D -> 1D
+freq_hfr_mhz = freq_hfr / 1e6  # optional: Hz -> MHz
+
 time_hfr_all = np.array([])
-psd_hfr_sfu_all = np.array([])  # TODO
+psd_hfr_sfu_all = np.zeros((1, len(freq_hfr)))
+
 
 for file in hfr_files:
     cdf_hfr = cdflib.CDF(file)
     time_hfr_ns  = cdf_hfr.varget("epoch_hfr_stokes")         # shape: (nTimeHFR,)
-    freq_hfr_2d  = cdf_hfr.varget("frequency_hfr_stokes")     # shape: (nTimeHFR, nFreqHFR)
     psd_hfr_sfu  = cdf_hfr.varget("psp_fld_l3_rfs_hfr_PSD_SFU") # shape: (nTimeHFR, nFreqHFR)
-    print(psd_hfr_sfu)
+    
     # cdf_hfr.close()  # I think this is outdated
     
-    freq_hfr = freq_hfr_2d[0, :]  # Convert 2D -> 1D if needed
     # time_hfr_dt  = j2000_ns_to_datetime(time_hfr_ns)
     time_hfr_dt  = cdflib.epochs.CDFepoch.to_datetime(time_hfr_ns)
     time_hfr_mpl = mdates.date2num(time_hfr_dt)
-    freq_hfr_mhz = freq_hfr / 1e6  # optional: Hz -> MHz
-
+    
     time_hfr_all = np.append(time_hfr_all, time_hfr_mpl)
-    freq_hfr_all = np.append(freq_hfr_all, freq_hfr)
     psd_hfr_sfu_all = np.append(psd_hfr_sfu_all, psd_hfr_sfu, axis=0)
-    freq_hfr_mhz_all = np.append(freq_hfr_mhz_all, freq_hfr_mhz)
 
-psd_hfr_sfu_all = psd_hfr_sfu_all[:-1,:-1]  # reduce dims by one for colormesh
-
+psd_hfr_sfu_all = psd_hfr_sfu_all[1:,:]
 
 ###############################################################################
 # Build meshes for pcolormesh
 ###############################################################################
-# TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_mpl, freq_lfr_mhz, indexing='ij')
-# TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_mpl, freq_hfr_mhz, indexing='ij')
+TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_all, freq_lfr_mhz, indexing='ij')
+TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_all, freq_hfr_mhz, indexing='ij')
 
-#TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_all, freq_lfr_mhz_all, indexing='ij')
-#TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_all, freq_hfr_mhz_all, indexing='ij')
+TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_all, freq_lfr_mhz, indexing='ij')
+TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_all, freq_hfr_mhz, indexing='ij')
 
 ###############################################################################
 # Custom colormap: gray for data < vmin, then Spectral
@@ -136,10 +128,10 @@ fig.subplots_adjust(
 # Plot HFR on top
 ###############################################################################
 mesh_hfr = ax_hfr.pcolormesh(
-    time_hfr_all,
-    freq_hfr_all,
+    TimeHFR2D,
+    FreqHFR2D,
     psd_hfr_sfu_all,
-    shading='auto',
+    shading='nearest',
     cmap=custom_cmap,
     norm=log_norm
 )
@@ -152,10 +144,10 @@ ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
 # Plot LFR on bottom
 ###############################################################################
 mesh_lfr = ax_lfr.pcolormesh(
-    time_lfr_all,
-    freq_lfr_all,
+    TimeLFR2D,
+    FreqLFR2D,
     psd_lfr_sfu_all,
-    shading='auto',
+    shading='nearest',
     cmap=custom_cmap,
     norm=log_norm
 )
