@@ -25,6 +25,20 @@ import cdaweb
 #     ])
 
 ###############################################################################
+# Custom colormap: gray for data < vmin, then Spectral/jet/whatever
+###############################################################################
+def custom_cmap(cmap):
+    mpl_cmap = plt.get_cmap(cmap, 256)   
+    colors_combined = np.vstack((
+        [0.5, 0.5, 0.5, 1.0], 
+        mpl_cmap(np.linspace(0, 1, 256))
+    ))
+    return ListedColormap(colors_combined)
+
+# Define the wanted colormap
+CMAP = 'jet'
+
+###############################################################################
 # Load LFR data
 ###############################################################################
 
@@ -64,7 +78,7 @@ freq_hfr_2d  = cdflib.CDF(hfr_files[0]).varget("frequency_hfr_stokes")     # sha
 freq_hfr = freq_hfr_2d[0, :]  # Convert 2D -> 1D
 freq_hfr_mhz = freq_hfr / 1e6  # optional: Hz -> MHz
 
-time_hfr_all = np.array([])
+time_hfr_all = np.array([])     # maybe redundant? This is just in case
 psd_hfr_sfu_all = np.zeros((1, len(freq_hfr)))
 
 
@@ -84,6 +98,7 @@ for file in hfr_files:
 
 psd_hfr_sfu_all = psd_hfr_sfu_all[1:,:]
 
+
 ###############################################################################
 # Build meshes for pcolormesh
 ###############################################################################
@@ -93,15 +108,6 @@ TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_all, freq_hfr_mhz, indexing='ij')
 TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_all, freq_lfr_mhz, indexing='ij')
 TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_all, freq_hfr_mhz, indexing='ij')
 
-###############################################################################
-# Custom colormap: gray for data < vmin, then Spectral
-###############################################################################
-cmap_spectral = cm.get_cmap('Spectral', 256)
-colors_combined = np.vstack((
-    [0.5, 0.5, 0.5, 1.0], 
-    cmap_spectral(np.linspace(0, 1, 256))
-))
-custom_cmap = ListedColormap(colors_combined)
 
 # Log scale range
 vmin, vmax = 500, 1e7
@@ -131,8 +137,8 @@ mesh_hfr = ax_hfr.pcolormesh(
     TimeHFR2D,
     FreqHFR2D,
     psd_hfr_sfu_all,
-    shading='nearest',
-    cmap=custom_cmap,
+    shading='auto',
+    cmap=custom_cmap(CMAP),
     norm=log_norm
 )
 ax_hfr.set_yscale('log')
@@ -147,8 +153,8 @@ mesh_lfr = ax_lfr.pcolormesh(
     TimeLFR2D,
     FreqLFR2D,
     psd_lfr_sfu_all,
-    shading='nearest',
-    cmap=custom_cmap,
+    shading='auto',
+    cmap=custom_cmap(CMAP),
     norm=log_norm
 )
 ax_lfr.set_yscale('log')
