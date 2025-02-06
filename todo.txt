@@ -1,4 +1,5 @@
 RFS:
+
 	- load multiple days, either use CDF write functionality to make one big CDF file or insert many many append calls in the code (prefer former)
 		- doing it the the same way as in swaves.py (append data)
 
@@ -38,4 +39,8 @@ RFS:
 									^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		ValueError: Converting an integer to a NumPy datetime requires a specified unit
 		
-	TODO: try without meshgrids (figure out shape of sfu values and appending them together)
+	TODO: ------FIXED
+
+6.2.2025: 
+- add 'jet' cmap option
+- remove strange bands

@@ -57,3 +57,9 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
         downloaded_files = []
     return downloaded_files
 
+if __name__ == "__main__":
+    files = cdaweb_download_fido("PSP_FLD_L3_RFS_HFR", "2021/04/15", "2021/04/16")
+    files_stereo = cdaweb_download_fido("STA_L3_WAV_HFR", "2021/04/15", "2021/04/16")
+
+    cdf_file = cdflib.CDF(files_stereo[0])
+    print(cdf_file.cdf_info())
