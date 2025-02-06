@@ -10,12 +10,9 @@ import cdflib
 import datetime as dt
 import cdaweb
 
-CMAP = 'jet'
 PSP_LFR_VARS = {'epoch':'epoch_lfr_stokes', 'frequency':'frequency_lfr_stokes', 'psd':'psp_fld_l3_rfs_lfr_PSD_SFU'}
 PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 'psd':'psp_fld_l3_rfs_hfr_PSD_SFU'}
 STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
-
-# TODO: define dicts for variable names of all different instruments
 
 
 ###############################################################################
@@ -35,15 +32,17 @@ STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
 ###############################################################################
 # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
 ###############################################################################
-def custom_cmap(cmap):
+
+def custom_cmap(cmap='Spectral'):
+    """
+    Generates a cmap with gray 
+    """
     mpl_cmap = plt.get_cmap(cmap, 256)   
     colors_combined = np.vstack((
         [0.5, 0.5, 0.5, 1.0], 
         mpl_cmap(np.linspace(0, 1, 256))
     ))
     return ListedColormap(colors_combined)
-
-# Define the wanted colormap
 
 
 def load_data(dataset, startdate, enddate):
@@ -59,7 +58,7 @@ def load_data(dataset, startdate, enddate):
         (ndarray): frequencies in MHz
         (ndarray): intensities in sfu for each (time, frequency) data point
     """
-    # define dataset variables
+    # use instrument specific variable names
     dset_split = dataset.split("_")
     if 'PSP' in dset_split:
         if 'LFR' in dset_split:
@@ -78,7 +77,7 @@ def load_data(dataset, startdate, enddate):
     if var == PSP_HFR_VARS or var == PSP_LFR_VARS:
         freq = freq[0, :]  
     
-    psd_sfu = np.zeros((1, len(freq)))  # this is just to get the right shape for appending
+    psd_sfu = np.zeros((1, len(freq)))  # this is just to get the right shape for appending, could probably be done better
     time = np.array([])
 
 
@@ -87,28 +86,28 @@ def load_data(dataset, startdate, enddate):
         time_ns_1day  = cdf_file.varget(var['epoch'])         # shape: (nTimeLFR,)
         psd_sfu_1day  = cdf_file.varget(var['psd'])           # shape: (nTimeLFR, nFreqLFR)
         # cdf_lfr.close()  # I think this is outdated
+        # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
+        if var == PSP_HFR_VARS:
+            # for each time step except the last one:
+            for i in range(len(time_ns_1day)-1):
+                # check if time increases by more than 60s:
+                if time_ns_1day[i+1]-time_ns_1day[i] > 60000000000:
+                    psd_sfu_1day[i,:] = np.nan
 
         # time_lfr_dt  = j2000_ns_to_datetime(time_lfr_ns)
         time_dt  = cdflib.epochs.CDFepoch.to_datetime(time_ns_1day)
         time_mpl = mdates.date2num(time_dt)
-        
+
         time = np.append(time, time_mpl)
         psd_sfu = np.append(psd_sfu, psd_sfu_1day, axis=0)
-
-    # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
-    if var == PSP_HFR_VARS:
-        # for each time step except the last one:
-        for i in range(len(time)-1):
-            # check if time increases by more than 60s:
-            if time[i+1]-time[i] > 60000000000:
-                psd_sfu[i,:] = np.nan
 
     psd_sfu = psd_sfu[1:-1,:-1]     # remove the zero row + last row and column
 
     return time, freq, psd_sfu
 
 
-def plot_data(lfr_data, hfr_data):
+
+def plot_data(lfr_data, hfr_data, cmap):
 
     ###############################################################################
     # Build meshes for pcolormesh
@@ -145,7 +144,7 @@ def plot_data(lfr_data, hfr_data):
         FreqHFR2D,
         hfr_data[2],
         shading='auto',
-        cmap=custom_cmap(CMAP),
+        cmap=cmap,
         norm=log_norm
     )
     ax_hfr.set_yscale('log')
@@ -161,7 +160,7 @@ def plot_data(lfr_data, hfr_data):
         FreqLFR2D,
         lfr_data[2],
         shading='auto',
-        cmap=custom_cmap(CMAP),
+        cmap=cmap,
         norm=log_norm
     )
     ax_lfr.set_yscale('log')
@@ -198,13 +197,13 @@ def plot_data(lfr_data, hfr_data):
 
     plt.show()
 
-if __name__ == "__main__":
+cmap = custom_cmap('jet')
 
-    #lfr_data = load_data("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
-    #hfr_data = load_data("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
+lfr_data = load_data("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
+hfr_data = load_data("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
 
-    lfr_data = load_data("STA_L3_WAV_LFR", startdate="2019/04/17", enddate="2019/04/19")
-    hfr_data = load_data("STA_L3_WAV_HFR", startdate="2019/04/17", enddate="2019/04/19")
+#lfr_data = load_data("STA_L3_WAV_LFR", startdate="2019/04/17", enddate="2019/04/19")
+#hfr_data = load_data("STA_L3_WAV_HFR", startdate="2019/04/17", enddate="2019/04/19")
 
-    plot_data(lfr_data, hfr_data)
+plot_data(lfr_data, hfr_data, cmap)
 
