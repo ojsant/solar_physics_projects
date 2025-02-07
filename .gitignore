@@ -1,0 +1,11 @@
+soler/*.png
+soler/*.txt
+soler/__pycache__
+soler/test.*
+soler/*.cdf
+
+*.png
+*.txt
+__pycache__
+test.*
+*.cdf
