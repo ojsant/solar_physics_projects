@@ -41,6 +41,10 @@ RFS:
 		
 	TODO: ------FIXED
 
-6.2.2025: 
-- add 'jet' cmap option
-- remove strange bands
+Colormap: either have the gray vector in the custom_cmap function, or use cbar.cmap.set_under("gray") (so a separate cmap function is unnecessary). Latter won't have a gray bit in
+the colorbar, but I guess it is just fine ----ok maybe not
+
+Wind:
+	- plot multiple days
+	- separate loading and plotting
+	- fillvals to nan (probably not needed, since greyed out either way)

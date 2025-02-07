@@ -12,7 +12,7 @@ import cdaweb
 
 PSP_LFR_VARS = {'epoch':'epoch_lfr_stokes', 'frequency':'frequency_lfr_stokes', 'psd':'psp_fld_l3_rfs_lfr_PSD_SFU'}
 PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 'psd':'psp_fld_l3_rfs_hfr_PSD_SFU'}
-STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
+#STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
 
 
 ###############################################################################
@@ -29,45 +29,50 @@ STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
 #         for ns in ns_array
 #     ])
 
-###############################################################################
-# Custom colormap: gray for data < vmin, then Spectral/jet/whatever
-###############################################################################
+# ###############################################################################
+# # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
+# ###############################################################################
 
-def custom_cmap(cmap='Spectral'):
+# def custom_cmap(cmap='Spectral'):
+#     """
+#     Generates a cmap with gray 
+#     """
+#     mpl_cmap = plt.get_cmap(cmap, 256)   
+#     colors_combined = np.vstack((
+#         [0.5, 0.5, 0.5, 1.0], 
+#         mpl_cmap(np.linspace(0, 1, 256))
+#     ))
+#     return ListedColormap(colors_combined)
+
+#def fillvals_to_nan():
+
+
+def read_psp_fields_files(dataset, startdate, enddate):
     """
-    Generates a cmap with gray 
-    """
-    mpl_cmap = plt.get_cmap(cmap, 256)   
-    colors_combined = np.vstack((
-        [0.5, 0.5, 0.5, 1.0], 
-        mpl_cmap(np.linspace(0, 1, 256))
-    ))
-    return ListedColormap(colors_combined)
+    Load PSP Fields data from CDAWeb. Combines time if timespan is multiple days.
 
-
-def load_data(dataset, startdate, enddate):
-    """
-    Load data from given dataset. Combines time if timespan is multiple days.
-
-    Parameters:
-        dataset (str): dataset
-        startdate, enddate (datetime or str): start/end date
+    Parameters
+    ----------
+        dataset : string
+            dataset identifier (PSP_FLD_L3_RFS_HFR for high frequency data and PSP_FLD_L3_RFS_LFR for low)
+                            
+        startdate, enddate : datetime or str
+            start/end date
     
     Returns:
-        (ndarray): timestamps in matplotlib format
+        ndarray
+          timestamps in matplotlib format
         (ndarray): frequencies in MHz
         (ndarray): intensities in sfu for each (time, frequency) data point
     """
     # use instrument specific variable names
     dset_split = dataset.split("_")
-    if 'PSP' in dset_split:
-        if 'LFR' in dset_split:
-            var = PSP_LFR_VARS
-        else:
-            var = PSP_HFR_VARS
-
-    elif 'STA' in dset_split:
-        var = STA_VARS
+    
+    if 'LFR' in dset_split:
+        var = PSP_LFR_VARS
+    elif 'HFR' in dset_split:
+        var = PSP_HFR_VARS
+    
 
     files = cdaweb.cdaweb_download_fido(dataset=dataset, startdate=startdate, enddate=enddate)
 
@@ -85,6 +90,7 @@ def load_data(dataset, startdate, enddate):
         cdf_file = cdflib.CDF(file)
         time_ns_1day  = cdf_file.varget(var['epoch'])         # shape: (nTimeLFR,)
         psd_sfu_1day  = cdf_file.varget(var['psd'])           # shape: (nTimeLFR, nFreqLFR)
+
         # cdf_lfr.close()  # I think this is outdated
         # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
         if var == PSP_HFR_VARS:
@@ -106,15 +112,15 @@ def load_data(dataset, startdate, enddate):
     return time, freq, psd_sfu
 
 
-
-def plot_data(lfr_data, hfr_data, cmap):
-
+def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
+    
     ###############################################################################
     # Build meshes for pcolormesh
     ###############################################################################
     TimeLFR2D, FreqLFR2D = np.meshgrid(lfr_data[0], lfr_data[1], indexing='ij')
     TimeHFR2D, FreqHFR2D = np.meshgrid(hfr_data[0], hfr_data[1], indexing='ij')
-
+    psdLFR = lfr_data[2]
+    psdHFR = hfr_data[2]
     # Log scale range
     vmin, vmax = 500, 1e7
     log_norm = colors.LogNorm(vmin=vmin, vmax=vmax)
@@ -142,15 +148,18 @@ def plot_data(lfr_data, hfr_data, cmap):
     mesh_hfr = ax_hfr.pcolormesh(
         TimeHFR2D,
         FreqHFR2D,
-        hfr_data[2],
-        shading='auto',
+        psdHFR,
+        shading='flat',
         cmap=cmap,
         norm=log_norm
     )
     ax_hfr.set_yscale('log')
     ax_hfr.set_ylabel("HFR (MHz)", fontsize=8)
     ax_hfr.tick_params(axis='both', which='major', labelsize=8)
-    ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
+
+    # TODO: instrument specific name
+    if sc == 'PSP':
+        ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
 
     ###############################################################################
     # Plot LFR on bottom
@@ -158,8 +167,8 @@ def plot_data(lfr_data, hfr_data, cmap):
     mesh_lfr = ax_lfr.pcolormesh(
         TimeLFR2D,
         FreqLFR2D,
-        lfr_data[2],
-        shading='auto',
+        psdLFR,
+        shading='flat',
         cmap=cmap,
         norm=log_norm
     )
@@ -197,13 +206,13 @@ def plot_data(lfr_data, hfr_data, cmap):
 
     plt.show()
 
-cmap = custom_cmap('jet')
 
-lfr_data = load_data("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
-hfr_data = load_data("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
+if __name__ == "__main__":
 
-#lfr_data = load_data("STA_L3_WAV_LFR", startdate="2019/04/17", enddate="2019/04/19")
-#hfr_data = load_data("STA_L3_WAV_HFR", startdate="2019/04/17", enddate="2019/04/19")
+    cmap = 'jet'
 
-plot_data(lfr_data, hfr_data, cmap)
+    lfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
+    hfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
+
+    plot_data(lfr_data, hfr_data, cmap)
 
