@@ -29,20 +29,8 @@ PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 
 #         for ns in ns_array
 #     ])
 
-# ###############################################################################
-# # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
-# ###############################################################################
 
-# def custom_cmap(cmap='Spectral'):
-#     """
-#     Generates a cmap with gray 
-#     """
-#     mpl_cmap = plt.get_cmap(cmap, 256)   
-#     colors_combined = np.vstack((
-#         [0.5, 0.5, 0.5, 1.0], 
-#         mpl_cmap(np.linspace(0, 1, 256))
-#     ))
-#     return ListedColormap(colors_combined)
+
 
 #def fillvals_to_nan():
 
@@ -121,6 +109,17 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
     TimeHFR2D, FreqHFR2D = np.meshgrid(hfr_data[0], hfr_data[1], indexing='ij')
     psdLFR = lfr_data[2]
     psdHFR = hfr_data[2]
+
+    ###############################################################################
+    # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
+    ###############################################################################
+    cmap = plt.get_cmap(cmap, 256)   
+    colors_combined = np.vstack((
+        [0.5, 0.5, 0.5, 1.0], 
+        cmap(np.linspace(0, 1, 256))
+    ))
+    custom_cmap = ListedColormap(colors_combined)
+
     # Log scale range
     vmin, vmax = 500, 1e7
     log_norm = colors.LogNorm(vmin=vmin, vmax=vmax)
@@ -150,7 +149,7 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
         FreqHFR2D,
         psdHFR,
         shading='flat',
-        cmap=cmap,
+        cmap=custom_cmap,
         norm=log_norm
     )
     ax_hfr.set_yscale('log')
@@ -169,7 +168,7 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
         FreqLFR2D,
         psdLFR,
         shading='flat',
-        cmap=cmap,
+        cmap=custom_cmap,
         norm=log_norm
     )
     ax_lfr.set_yscale('log')
@@ -177,6 +176,7 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
     ax_lfr.set_xlabel("Time (UTC)", fontsize=8)
     ax_lfr.tick_params(axis='both', which='major', labelsize=8)
 
+    
     ###############################################################################
     # Single colorbar on right
     ###############################################################################
@@ -186,7 +186,7 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
                         extend='both', extendfrac='auto')
     cbar.set_label("Intensity (sfu)", rotation=270, labelpad=10, fontsize=8)
     cbar.ax.tick_params(labelsize=7)
-    cbar.cmap.set_under('gray')
+    #cbar.cmap.set_under('gray')
 
     ###############################################################################
     # Use AutoDateLocator + ConciseDateFormatter, but no rotation on ticks
@@ -208,11 +208,8 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
 
 
 if __name__ == "__main__":
-
-    cmap = 'jet'
-
     lfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
     hfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
 
-    plot_data(lfr_data, hfr_data, cmap)
+    plot_data(lfr_data, hfr_data, cmap='jet')
 
