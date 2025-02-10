@@ -10,6 +10,11 @@ from cdflib.epochs import CDFepoch
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
+from sunpy.net import Scraper
+from sunpy.time import TimeRange
+from sunpy.data.data_manager.downloader import ParfiveDownloader
+
+from parfive import Results
 
 def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
     """
@@ -57,9 +62,47 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
         downloaded_files = []
     return downloaded_files
 
-if __name__ == "__main__":
-    files = cdaweb_download_fido("PSP_FLD_L3_RFS_HFR", "2021/04/15", "2021/04/16")
-    files_stereo = cdaweb_download_fido("STA_L3_WAV_HFR", "2021/04/15", "2021/04/16")
 
-    cdf_file = cdflib.CDF(files_stereo[0])
-    print(cdf_file.cdf_info())
+def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
+    """
+    Download Wind WAVES files with ParfiveDownloader class. DOESN'T WORK
+    """
+    dl = ParfiveDownloader()
+
+    timerange = TimeRange(startdate, enddate)
+
+    try:
+        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{instrument}_l2/%Y/wi_l2_wav_{instrument}_%Y%m%d_v01.cdf", instrument=dataset.lower())
+
+        filelist_urls = scrap.filelist(timerange=timerange)
+        filelist = [url.split('/')[-1] for url in filelist_urls]
+
+        sunpy_dir = sunpy.config.get('downloads', 'download_dir')
+
+        if path is None:
+            filelist = [sunpy_dir + os.sep + file for file in filelist]
+        elif type(path) is str:
+            filelist = [path + os.sep + f for f in filelist]
+        downloaded_files = filelist
+
+        # Check if file with same name already exists in path
+        for url, f in zip(filelist_urls, filelist):
+            if os.path.exists(f) and os.path.getsize(f) == 0:
+                os.remove(f)
+            if not os.path.exists(f) and path is None:
+                # TODO: figure out why files aren't downloaded 
+                # (doesn't throw any errors or anything, just refuses to download files into the sunpy dir)
+                downloaded_file = dl.download(url=url, path=sunpy_dir)
+            else:
+                downloaded_file = dl.download(url=url, path=path)
+
+        print(Results().errors)
+
+    except (RuntimeError, IndexError):
+        print(f'Unable to obtain Wind WAVES {dataset} data for {startdate}-{enddate}!')
+        downloaded_files = []
+
+    return downloaded_files
+
+if __name__ == "__main__":
+    print("asd")
