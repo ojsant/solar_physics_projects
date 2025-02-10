@@ -65,7 +65,20 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
 
 def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
     """
-    Download Wind WAVES files with ParfiveDownloader class. DOESN'T WORK
+    Download a single Wind WAVES file with ParfiveDownloader class.
+
+    Parameters
+    ----------
+    dataset: str
+        RAD1 or RAD2 (lower case works as well)
+    startdate, enddate: str or dt
+        start and end dates as parse_time compatible strings or datetimes (see TimeRange docs)
+    path : str (optional)
+        Local download directory, defaults to sunpy's data directory
+    
+    Returns
+    -------
+    List of downloaded files
     """
     dl = ParfiveDownloader()
 
@@ -89,20 +102,15 @@ def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
         for url, f in zip(filelist_urls, filelist):
             if os.path.exists(f) and os.path.getsize(f) == 0:
                 os.remove(f)
-            if not os.path.exists(f) and path is None:
-                # TODO: figure out why files aren't downloaded 
-                # (doesn't throw any errors or anything, just refuses to download files into the sunpy dir)
-                downloaded_file = dl.download(url=url, path=sunpy_dir)
-            else:
-                downloaded_file = dl.download(url=url, path=path)
-
-        print(Results().errors)
+            if not os.path.exists(f):
+                downloaded_file = dl.download(url=url, path=f)
 
     except (RuntimeError, IndexError):
         print(f'Unable to obtain Wind WAVES {dataset} data for {startdate}-{enddate}!')
         downloaded_files = []
+        # in case of error, should probably clear the directory of any successful downloads? i dunno
 
     return downloaded_files
 
 if __name__ == "__main__":
-    print("asd")
+    files = download_wind_waves_cdf("RAD1", "2021/04/19", "2021/04/21")
