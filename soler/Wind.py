@@ -38,11 +38,12 @@ def j2000_ns_to_datetime(ns_array):
 ###############################################################################
 # 2) Read a single Wind/WAVES file (assuming freq is 1D or identical rows if 2D)
 ###############################################################################
-def read_wind_waves_cdf(files, psd_var="PSD_V2_SP"):
-    #files = cdaweb.download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
+def read_wind_waves_cdf(dataset, startdate, enddate, file_path=None, psd_var="PSD_V2_SP"):
+    files = cdaweb.download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
     
     # Read the frequency binning (assumed constant across all data)
     freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
+
     # If freq is 2D but each row is identical, take freq_raw[0,:]
     if freq_hz.ndim == 2:
         freq_hz = freq_hz[0, :]
@@ -110,12 +111,11 @@ def read_wind_waves_cdf(files, psd_var="PSD_V2_SP"):
 ###############################################################################
 cmap = 'jet'
 
-# TODO: do a downloading function for these (current attempt in cdaweb.py)
-rad2files = [r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad2_20240101_v01.cdf", r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad2_20240102_v01.cdf"]
-rad1files = [r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad1_20240101_v01.cdf", r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad1_20240102_v01.cdf"]
+#rad2files = [r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad2_20240101_v01.cdf", r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad2_20240102_v01.cdf"]
+#rad1files = [r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad1_20240101_v01.cdf", r"C:\Users\osant\Desktop\solar_physics_projects\soler\wi_l2_wav_rad1_20240102_v01.cdf"]
 
-time_rad2_mpl, freq_rad2_mhz, psd_rad2_v2hz = read_wind_waves_cdf(rad2files)
-time_rad1_mpl, freq_rad1_mhz, psd_rad1_v2hz = read_wind_waves_cdf(rad1files)
+time_rad2_mpl, freq_rad2_mhz, psd_rad2_v2hz = read_wind_waves_cdf("rad2", "2021/04/19", "2021/04/21")
+time_rad1_mpl, freq_rad1_mhz, psd_rad1_v2hz = read_wind_waves_cdf("rad1", "2021/04/19", "2021/04/21")
 
 TT2, FF2 = np.meshgrid(time_rad2_mpl, freq_rad2_mhz, indexing='ij')
 TT1, FF1 = np.meshgrid(time_rad1_mpl, freq_rad1_mhz, indexing='ij')
