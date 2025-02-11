@@ -63,13 +63,13 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
     return downloaded_files
 
 
-def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
+def download_wind_waves_cdf(band, startdate, enddate, path=None):
     """
     Download a single Wind WAVES file with ParfiveDownloader class.
 
     Parameters
     ----------
-    dataset: str
+    band: str
         RAD1 or RAD2 (lower case works as well)
     startdate, enddate: str or dt
         start and end dates as parse_time compatible strings or datetimes (see TimeRange docs)
@@ -85,15 +85,13 @@ def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
     timerange = TimeRange(startdate, enddate)
 
     try:
-        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{instrument}_l2/%Y/wi_l2_wav_{instrument}_%Y%m%d_v01.cdf", instrument=dataset.lower())
+        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{band}_l2/%Y/wi_l2_wav_{band}_%Y%m%d_v01.cdf", band=band.lower())
 
         filelist_urls = scrap.filelist(timerange=timerange)
         filelist = [url.split('/')[-1] for url in filelist_urls]
 
-        sunpy_dir = sunpy.config.get('downloads', 'download_dir')
-
         if path is None:
-            filelist = [sunpy_dir + os.sep + file for file in filelist]
+            filelist = [sunpy.config.get('downloads', 'download_dir') + os.sep + file for file in filelist]
         elif type(path) is str:
             filelist = [path + os.sep + f for f in filelist]
         downloaded_files = filelist
@@ -106,7 +104,7 @@ def download_wind_waves_cdf(dataset, startdate, enddate, path=None):
                 downloaded_file = dl.download(url=url, path=f)
 
     except (RuntimeError, IndexError):
-        print(f'Unable to obtain Wind WAVES {dataset} data for {startdate}-{enddate}!')
+        print(f'Unable to obtain Wind WAVES {band} data for {startdate}-{enddate}!')
         downloaded_files = []
         # in case of error, should probably clear the directory of any successful downloads? i dunno
 
