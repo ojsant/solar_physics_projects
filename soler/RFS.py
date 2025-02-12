@@ -2,17 +2,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as colors
-from matplotlib.colors import ListedColormap
-from matplotlib import cm
+
+from sunpy.time import TimeRange
+
 from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 
 import cdflib
-import datetime as dt
 import cdaweb
 
 PSP_LFR_VARS = {'epoch':'epoch_lfr_stokes', 'frequency':'frequency_lfr_stokes', 'psd':'psp_fld_l3_rfs_lfr_PSD_SFU'}
 PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 'psd':'psp_fld_l3_rfs_hfr_PSD_SFU'}
-#STA_VARS = {'epoch' : 'Epoch', 'frequency': 'FREQUENCY', 'psd':'PSD_SFU'}
 
 
 ###############################################################################
@@ -30,78 +29,89 @@ PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 
 #     ])
 
 
-
-
-#def fillvals_to_nan():
-
-
-def read_psp_fields_cdf(dataset, startdate, enddate):
+def read_psp_fields_cdf(startdate, enddate, path=None):
     """
     Load PSP Fields data from CDAWeb. Combines time if timespan is multiple days.
 
     Parameters
     ----------
-        dataset : string
-            dataset identifier (PSP_FLD_L3_RFS_HFR for high frequency data and PSP_FLD_L3_RFS_LFR for low)
-                            
-        startdate, enddate : datetime or str
-            start/end date
+    startdate, enddate : datetime or str
+        start/end date in standard format (e.g. YYYY-mm-dd or YYYY/mm/dd, anything parseable by sunpy.time.parse_time)
     
-    Returns:
-        ndarray
-          timestamps in matplotlib format
-        (ndarray): frequencies in MHz
-        (ndarray): intensities in sfu for each (time, frequency) data point
+    dataset : string (optional)
+        dataset identifier (PSP_FLD_L3_RFS_HFR for high frequency data and  for low) (both by default)
+                        
+    Returns
+    -------
+    ndarray :
+        1) timestamps in matplotlib format,
+        2) frequencies in MHz,
+        3) intensities in sfu for each (time, frequency) data point
     """
-    # use instrument specific variable names
-    dset_split = dataset.split("_")
-    
-    if 'LFR' in dset_split:
-        var = PSP_LFR_VARS
-    elif 'HFR' in dset_split:
-        var = PSP_HFR_VARS
-    
 
-    files = cdaweb.cdaweb_download_fido(dataset=dataset, startdate=startdate, enddate=enddate)
+    # TODO If no end date is given, assume 1 day
 
-    freq  = cdflib.CDF(files[0]).varget(var['frequency'])     
+    lfr_data = []
+    hfr_data = []
 
-    # PSP frequency array shape is (nTimeLFR, nFreqLFR)
-    if var == PSP_HFR_VARS or var == PSP_LFR_VARS:
-        freq = freq[0, :]  
-    
-    psd_sfu = np.empty(shape=(0,len(freq)))
-    time = np.array([])
+    datasets = ['PSP_FLD_L3_RFS_LFR', 'PSP_FLD_L3_RFS_HFR']
 
+    for dataset in datasets:
+        data = []
+        if dataset == 'PSP_FLD_L3_RFS_LFR':
+            data = lfr_data
+            var = PSP_LFR_VARS
+        else:
+            data = hfr_data
+            var = PSP_HFR_VARS
 
-    for file in files:
-        cdf_file = cdflib.CDF(file)
-        time_ns_1day  = cdf_file.varget(var['epoch'])         # shape: (nTimeLFR,)
-        psd_sfu_1day  = cdf_file.varget(var['psd'])           # shape: (nTimeLFR, nFreqLFR)
+        files = cdaweb.cdaweb_download_fido(dataset=dataset, startdate=startdate, enddate=enddate, path=path)
 
-        # cdf_lfr.close()  # I think this is outdated
-        # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
-        if var == PSP_HFR_VARS:
-            # for each time step except the last one:
-            for i in range(len(time_ns_1day)-1):
-                # check if time increases by more than 60s:
-                if time_ns_1day[i+1]-time_ns_1day[i] > 60000000000:
-                    psd_sfu_1day[i,:] = np.nan
+        freq  = cdflib.CDF(files[0]).varget(var['frequency'])     
 
-        # time_lfr_dt  = j2000_ns_to_datetime(time_lfr_ns)
-        time_dt  = cdflib.epochs.CDFepoch.to_datetime(time_ns_1day)
-        time_mpl = mdates.date2num(time_dt)
+        # PSP frequency array shape is (nTimeLFR, nFreqLFR)
+        if freq.ndim == 2:
+            freq = freq[0, :]
 
-        time = np.append(time, time_mpl)
-        psd_sfu = np.append(psd_sfu, psd_sfu_1day, axis=0)
-
-    psd_sfu = psd_sfu[:-1,:-1]     # remove last row and column
-
-    return time, freq, psd_sfu
+        psd_sfu = np.empty(shape=(0,len(freq)))
+        time = np.array([])
 
 
-def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
-    
+        for file in files:
+            cdf_file = cdflib.CDF(file)
+            time_ns_1day  = cdf_file.varget(var['epoch'])         # shape: (nTimeLFR,)
+            psd_sfu_1day  = cdf_file.varget(var['psd'])           # shape: (nTimeLFR, nFreqLFR)
+
+            # cdf_lfr.close()  # I think this is outdated
+            # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
+            if var == PSP_HFR_VARS:
+                # for each time step except the last one:
+                for i in range(len(time_ns_1day)-1):
+                    # check if time increases by more than 60s:
+                    if time_ns_1day[i+1]-time_ns_1day[i] > 60000000000:
+                        psd_sfu_1day[i,:] = np.nan
+
+            # time_lfr_dt  = j2000_ns_to_datetime(time_lfr_ns)
+            time_dt  = cdflib.epochs.CDFepoch.to_datetime(time_ns_1day)
+            time_mpl = mdates.date2num(time_dt)
+
+            time = np.append(time, time_mpl)
+            psd_sfu = np.append(psd_sfu, psd_sfu_1day, axis=0)
+
+        psd_sfu = psd_sfu[:-1,:-1]     # remove last row and column
+
+        data.append(time)
+        data.append(freq)
+        data.append(psd_sfu)
+
+    return lfr_data, hfr_data
+
+
+def plot_psp_fields(lfr_data, hfr_data, enddate, cmap='jet'):
+    """
+    Plot PSP FIELDS data (both LFR and HFR). 
+    """
+
     time_hfr_mpl, freq_hfr_mhz, psd_hfr_sfu = hfr_data
     time_lfr_mpl, freq_lfr_mhz, psd_lfr_sfu = lfr_data
 
@@ -208,8 +218,11 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
 
 
 if __name__ == "__main__":
-    lfr_data = read_psp_fields_cdf("PSP_FLD_L3_RFS_LFR", startdate="2023/04/17", enddate="2023/04/19")
-    hfr_data = read_psp_fields_cdf("PSP_FLD_L3_RFS_HFR", startdate="2023/04/17", enddate="2023/04/19")
 
+    startdate = "2023/04/17"
+    enddate   = "2023/04/19"
+
+    lfr_data, hfr_data = read_psp_fields_cdf(startdate, enddate)
+    
     plot_psp_fields(lfr_data, hfr_data)
 

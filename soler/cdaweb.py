@@ -57,7 +57,7 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
 # make this generally for any instrument? 
 def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     """
-    Download a single Wind WAVES file with ParfiveDownloader class.
+    Download a single Wind WAVES file (L2 only) with ParfiveDownloader class.
 
     Parameters
     ----------
@@ -77,8 +77,9 @@ def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     timerange = TimeRange(startdate, enddate)
 
     try:
-        # TODO handle data versions
-        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_v01.cdf", sensor=sensor.lower())
+        pattern = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_{version}.cdf"
+
+        scrap = Scraper(pattern=pattern, sensor=sensor.lower(), version=".*")   # handles any version
 
         # for some reason includes the day preceding startdate, so just remove it
         # also includes the enddate as well, remove that to keep the scheme consistent

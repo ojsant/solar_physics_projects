@@ -36,77 +36,95 @@ def j2000_ns_to_datetime(ns_array):
 
 
 ###############################################################################
-# 2) Read a single Wind/WAVES file (assuming freq is 1D or identical rows if 2D)
+# 2) Read Wind/WAVES data (assuming freq is 1D or identical rows if 2D)
 ###############################################################################
-def read_wind_waves_cdf(dataset, startdate, enddate, file_path=None, psd_var="PSD_V2_SP"):
-    files = cdaweb.download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
-    
-    # Read the frequency binning (assumed constant across all data)
-    freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
+def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP"):
 
-    # If freq is 2D but each row is identical, take freq_raw[0,:]
-    if freq_hz.ndim == 2:
-        freq_hz = freq_hz[0, :]
-    
-    psd_v2hz = np.empty(shape=(0,len(freq_hz))) 
-    time = np.array([])
+    rad1_data = []
+    rad2_data = []
 
-    # append data 
-    for file in files:
-        cdf = cdflib.CDF(file)
+    datasets = ["RAD1", "RAD2"]
+
+    for dataset in datasets:
+        if dataset == "RAD1":
+            data = rad1_data
+        else:
+            data = rad2_data
+
+        files = cdaweb.download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
+
+        # Read the frequency binning (assumed constant across all data)
+        freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
+
+        # If freq is 2D but each row is identical, take freq_raw[0,:]
+        if freq_hz.ndim == 2:
+            freq_hz = freq_hz[0, :]
         
-        # Time
-        time_ns = cdf.varget("Epoch")  # shape (nTime,)
-        time_dt = j2000_ns_to_datetime(time_ns)
-        time_mpl = mdates.date2num(time_dt)
+        psd_v2hz = np.empty(shape=(0,len(freq_hz))) 
+        time = np.array([])
+
+        # append data 
+        for file in files:
+            cdf = cdflib.CDF(file)
+            
+            # Time
+            time_ns = cdf.varget("Epoch")  # shape (nTime,)
+            time_dt = j2000_ns_to_datetime(time_ns)
+            time_mpl = mdates.date2num(time_dt)
+            
+            # PSD shape (nTime, nFreq)
+            psd_raw = cdf.varget(psd_var)
+            #cdf.close()
         
-        # PSD shape (nTime, nFreq)
-        psd_raw = cdf.varget(psd_var)
-        #cdf.close()
-    
-        time = np.append(time, time_mpl)
-        psd_v2hz = np.append(psd_v2hz, psd_raw, axis=0)
+            time = np.append(time, time_mpl)
+            psd_v2hz = np.append(psd_v2hz, psd_raw, axis=0)
 
-    # Some files use a fill value ~ -9.9999998e+30
-    fill_val = -9.999999848243207e+30
-    valid_mask = (freq_hz > 0) & (freq_hz != fill_val) 
-    freq_hz = freq_hz[valid_mask]
-    psd_v2hz = psd_v2hz[:, valid_mask]
+        # Some files use a fill value ~ -9.9999998e+30
+        fill_val = -9.999999848243207e+30
+        valid_mask = (freq_hz > 0) & (freq_hz != fill_val) 
+        freq_hz = freq_hz[valid_mask]
+        psd_v2hz = psd_v2hz[:, valid_mask]
 
-    # Convert frequency to MHz
-    freq_mhz = freq_hz / 1e6
+        # Convert frequency to MHz
+        freq_mhz = freq_hz / 1e6
 
-    # Sort time
-    if not sorted(time):
-        idx_t = np.argsort(time)
-        time = time[idx_t]
-        psd_v2hz  = psd_v2hz[idx_t, :]
+        # Sort time
+        if not sorted(time):
+            idx_t = np.argsort(time)
+            time = time[idx_t]
+            psd_v2hz  = psd_v2hz[idx_t, :]
 
-    # Remove duplicate times
-    t_unique, t_uidx = np.unique(time, return_index=True)
-    if len(t_unique) < len(time):
-        time = t_unique
-        psd_v2hz  = psd_v2hz[t_uidx, :]
+        # Remove duplicate times
+        t_unique, t_uidx = np.unique(time, return_index=True)
+        if len(t_unique) < len(time):
+            time = t_unique
+            psd_v2hz  = psd_v2hz[t_uidx, :]
 
-    # Sort freq
-    if not sorted(freq_mhz):
-        idx_f = np.argsort(freq_mhz)
-        freq_mhz = freq_mhz[idx_f]
-        psd_v2hz  = psd_v2hz[:, idx_f]
+        # Sort freq
+        if not sorted(freq_mhz):
+            idx_f = np.argsort(freq_mhz)
+            freq_mhz = freq_mhz[idx_f]
+            psd_v2hz  = psd_v2hz[:, idx_f]
 
-    # Remove duplicate freqs
-    f_unique, f_uidx = np.unique(freq_mhz, return_index=True)
-    if len(f_unique) < len(freq_mhz):
-        freq_mhz = f_unique
-        psd_v2hz  = psd_v2hz[:, f_uidx]
+        # Remove duplicate freqs
+        f_unique, f_uidx = np.unique(freq_mhz, return_index=True)
+        if len(f_unique) < len(freq_mhz):
+            freq_mhz = f_unique
+            psd_v2hz  = psd_v2hz[:, f_uidx]
 
-    psd_v2hz = psd_v2hz[:-1,:-1]
+        psd_v2hz = psd_v2hz[:-1,:-1]
 
-    return time, freq_mhz, psd_v2hz
+        data.append(time)
+        data.append(freq_mhz)
+        data.append(psd_v2hz)
+
+    return rad1_data, rad2_data
 
 
-def plot_wind_waves(rad2_data, rad1_data, cmap='jet'):
-
+def plot_wind_waves(rad1_data, rad2_data, cmap='jet'):
+    """
+    Plot Wind WAVES data (both RAD1 and RAD2).
+    """
     time_rad2_mpl, freq_rad2_mhz, psd_rad2_v2hz = rad2_data
     time_rad1_mpl, freq_rad1_mhz, psd_rad1_v2hz = rad1_data
 
@@ -176,9 +194,13 @@ def plot_wind_waves(rad2_data, rad1_data, cmap='jet'):
     for label in ax_bottom.get_xticklabels(which='major'):
         label.set(rotation=0, ha='center')
 
+    ax_bottom.set_xlim(time_rad1_mpl[0], time_rad1_mpl[-1])
+
     plt.show()
 
 if __name__ == "__main__":
-    rad2 = read_wind_waves_cdf("rad2", "2021/04/19", "2021/04/21")
-    rad1 = read_wind_waves_cdf("rad1", "2021/04/19", "2021/04/21")
-    plot_wind_waves(rad2, rad1)
+
+    startdate = "2023/04/17"
+    enddate   = "2023/04/19"
+    rad1, rad2 = read_wind_waves_cdf(startdate=startdate, enddate=enddate)
+    plot_wind_waves(rad1, rad2)
