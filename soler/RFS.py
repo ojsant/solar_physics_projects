@@ -107,7 +107,7 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
     return lfr_data, hfr_data
 
 
-def plot_psp_fields(lfr_data, hfr_data, enddate, cmap='jet'):
+def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
     """
     Plot PSP FIELDS data (both LFR and HFR). 
     """
@@ -223,6 +223,6 @@ if __name__ == "__main__":
     enddate   = "2023/04/19"
 
     lfr_data, hfr_data = read_psp_fields_cdf(startdate, enddate)
-    
+
     plot_psp_fields(lfr_data, hfr_data)
 
