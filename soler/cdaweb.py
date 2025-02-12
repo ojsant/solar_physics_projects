@@ -62,7 +62,7 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
         downloaded_files = []
     return downloaded_files
 
-
+# make this generally for any instrument? 
 def download_wind_waves_cdf(band, startdate, enddate, path=None):
     """
     Download a single Wind WAVES file with ParfiveDownloader class.
@@ -87,7 +87,10 @@ def download_wind_waves_cdf(band, startdate, enddate, path=None):
     try:
         scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{band}_l2/%Y/wi_l2_wav_{band}_%Y%m%d_v01.cdf", band=band.lower())
 
-        filelist_urls = scrap.filelist(timerange=timerange)
+        # for some reason includes the day preceding startdate, so just remove it (TODO this has to be looked into)
+        # also includes the enddate as well, remove that to keep the scheme consistent
+        filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
+
         filelist = [url.split('/')[-1] for url in filelist_urls]
 
         if path is None:
@@ -101,7 +104,7 @@ def download_wind_waves_cdf(band, startdate, enddate, path=None):
             if os.path.exists(f) and os.path.getsize(f) == 0:
                 os.remove(f)
             if not os.path.exists(f):
-                downloaded_file = dl.download(url=url, path=f)
+                dl.download(url=url, path=f)
 
     except (RuntimeError, IndexError):
         print(f'Unable to obtain Wind WAVES {band} data for {startdate}-{enddate}!')
@@ -111,4 +114,4 @@ def download_wind_waves_cdf(band, startdate, enddate, path=None):
     return downloaded_files
 
 if __name__ == "__main__":
-    files = download_wind_waves_cdf("RAD1", "2021/04/19", "2021/04/21")
+    files = download_wind_waves_cdf("RAD1", "2024/04/19", "2024/04/21")
