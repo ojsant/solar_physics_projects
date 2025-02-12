@@ -48,3 +48,5 @@ Wind:
 	- plot multiple days
 	- separate loading and plotting
 	- fillvals to nan (probably not needed, since greyed out either way)
+
+	C:\Users\osant\sunpy\data
