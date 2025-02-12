@@ -35,7 +35,7 @@ PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 
 #def fillvals_to_nan():
 
 
-def read_psp_fields_files(dataset, startdate, enddate):
+def read_psp_fields_cdf(dataset, startdate, enddate):
     """
     Load PSP Fields data from CDAWeb. Combines time if timespan is multiple days.
 
@@ -70,7 +70,7 @@ def read_psp_fields_files(dataset, startdate, enddate):
     if var == PSP_HFR_VARS or var == PSP_LFR_VARS:
         freq = freq[0, :]  
     
-    psd_sfu = np.zeros((1, len(freq)))  # this is just to get the right shape for appending, could probably be done better
+    psd_sfu = np.empty(shape=(0,len(freq)))
     time = np.array([])
 
 
@@ -95,30 +95,31 @@ def read_psp_fields_files(dataset, startdate, enddate):
         time = np.append(time, time_mpl)
         psd_sfu = np.append(psd_sfu, psd_sfu_1day, axis=0)
 
-    psd_sfu = psd_sfu[1:-1,:-1]     # remove the zero row + last row and column
+    psd_sfu = psd_sfu[:-1,:-1]     # remove last row and column
 
     return time, freq, psd_sfu
 
 
-def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
+def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
     
+    time_hfr_mpl, freq_hfr_mhz, psd_hfr_sfu = hfr_data
+    time_lfr_mpl, freq_lfr_mhz, psd_lfr_sfu = lfr_data
+
     ###############################################################################
     # Build meshes for pcolormesh
     ###############################################################################
-    TimeLFR2D, FreqLFR2D = np.meshgrid(lfr_data[0], lfr_data[1], indexing='ij')
-    TimeHFR2D, FreqHFR2D = np.meshgrid(hfr_data[0], hfr_data[1], indexing='ij')
-    psdLFR = lfr_data[2]
-    psdHFR = hfr_data[2]
+    TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_mpl, freq_lfr_mhz, indexing='ij')
+    TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_mpl, freq_hfr_mhz, indexing='ij')
 
     ###############################################################################
     # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
     ###############################################################################
-    cmap = plt.get_cmap(cmap, 256)   
-    colors_combined = np.vstack((
-        [0.5, 0.5, 0.5, 1.0], 
-        cmap(np.linspace(0, 1, 256))
-    ))
-    custom_cmap = ListedColormap(colors_combined)
+    # cmap = plt.get_cmap(cmap, 256)   
+    # colors_combined = np.vstack((
+    #     [0.5, 0.5, 0.5, 1.0], 
+    #     cmap(np.linspace(0, 1, 256))
+    # ))
+    # custom_cmap = ListedColormap(colors_combined)
 
     # Log scale range
     vmin, vmax = 500, 1e7
@@ -147,18 +148,17 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
     mesh_hfr = ax_hfr.pcolormesh(
         TimeHFR2D,
         FreqHFR2D,
-        psdHFR,
+        psd_hfr_sfu,
         shading='flat',
-        cmap=custom_cmap,
+        cmap=cmap,
         norm=log_norm
     )
     ax_hfr.set_yscale('log')
     ax_hfr.set_ylabel("HFR (MHz)", fontsize=8)
     ax_hfr.tick_params(axis='both', which='major', labelsize=8)
 
-    # TODO: instrument specific name
-    if sc == 'PSP':
-        ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
+    
+    ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
 
     ###############################################################################
     # Plot LFR on bottom
@@ -166,9 +166,9 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
     mesh_lfr = ax_lfr.pcolormesh(
         TimeLFR2D,
         FreqLFR2D,
-        psdLFR,
+        psd_lfr_sfu,
         shading='flat',
-        cmap=custom_cmap,
+        cmap=cmap,
         norm=log_norm
     )
     ax_lfr.set_yscale('log')
@@ -202,14 +202,14 @@ def plot_data(lfr_data, hfr_data, cmap, sc="PSP"):
         label.set(rotation=0, ha='center')
 
     # Set the x-range
-    ax_lfr.set_xlim(lfr_data[0][0], lfr_data[0][-1])
+    ax_lfr.set_xlim(time_lfr_mpl[0], time_lfr_mpl[-1])
 
     plt.show()
 
 
 if __name__ == "__main__":
-    lfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_LFR", startdate="2019/04/17", enddate="2019/04/19")
-    hfr_data = read_psp_fields_files("PSP_FLD_L3_RFS_HFR", startdate="2019/04/17", enddate="2019/04/19")
+    lfr_data = read_psp_fields_cdf("PSP_FLD_L3_RFS_LFR", startdate="2023/04/17", enddate="2023/04/19")
+    hfr_data = read_psp_fields_cdf("PSP_FLD_L3_RFS_HFR", startdate="2023/04/17", enddate="2023/04/19")
 
-    plot_data(lfr_data, hfr_data, cmap='jet')
+    plot_psp_fields(lfr_data, hfr_data)
 

@@ -1,20 +1,12 @@
-import cdflib
-import copy
-import datetime as dt
-import numpy as np
 import os
-import pandas as pd
 import sunpy
 
-from cdflib.epochs import CDFepoch
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
 from sunpy.net import Scraper
 from sunpy.time import TimeRange
 from sunpy.data.data_manager.downloader import ParfiveDownloader
-
-from parfive import Results
 
 def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
     """
@@ -63,13 +55,13 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
     return downloaded_files
 
 # make this generally for any instrument? 
-def download_wind_waves_cdf(band, startdate, enddate, path=None):
+def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     """
     Download a single Wind WAVES file with ParfiveDownloader class.
 
     Parameters
     ----------
-    band: str
+    sensor: str
         RAD1 or RAD2 (lower case works as well)
     startdate, enddate: str or dt
         start and end dates as parse_time compatible strings or datetimes (see TimeRange docs)
@@ -81,13 +73,14 @@ def download_wind_waves_cdf(band, startdate, enddate, path=None):
     List of downloaded files
     """
     dl = ParfiveDownloader()
-
+    
     timerange = TimeRange(startdate, enddate)
 
     try:
-        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{band}_l2/%Y/wi_l2_wav_{band}_%Y%m%d_v01.cdf", band=band.lower())
+        # TODO handle data versions
+        scrap = Scraper(pattern="https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_v01.cdf", sensor=sensor.lower())
 
-        # for some reason includes the day preceding startdate, so just remove it (TODO this has to be looked into)
+        # for some reason includes the day preceding startdate, so just remove it
         # also includes the enddate as well, remove that to keep the scheme consistent
         filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
 
@@ -107,7 +100,7 @@ def download_wind_waves_cdf(band, startdate, enddate, path=None):
                 dl.download(url=url, path=f)
 
     except (RuntimeError, IndexError):
-        print(f'Unable to obtain Wind WAVES {band} data for {startdate}-{enddate}!')
+        print(f'Unable to obtain Wind WAVES {sensor} data for {startdate}-{enddate}!')
         downloaded_files = []
         # in case of error, should probably clear the directory of any successful downloads? i dunno
 
