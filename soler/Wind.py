@@ -37,10 +37,24 @@ def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     try:
         pattern = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_{version}.cdf"
 
-        scrap = Scraper(pattern=pattern, sensor=sensor.lower(), version=".*")   # TODO pick highest version number
+        scrap = Scraper(pattern=pattern, sensor=sensor.lower(), version="v\\d{2}")  # regex matching "v{any digit}{any digit}""
+        filelist_urls = scrap.filelist(timerange=timerange)
 
-        # for some reason includes the day preceding startdate, so just remove it
-        # also includes the enddate as well, remove that to keep the scheme consistent
+        filelist_urls.sort()
+
+        # After sorting, any multiple versions are next to each other in ascending order.
+        # If there are files with same dates, assume multiple versions -> pop the first one and repeat.
+        # Should end up with a list with highest version numbers. Magic number -5 is the index where 
+        # version number starts
+        # As of 13.2.2025, no higher versions than v01 exist in either rad1_l2 or rad2_l2 directory
+
+        i = 0
+        while i < len(filelist_urls) - 1:
+            if filelist_urls[i+1][:-5] == filelist_urls[i][:-5]:
+                filelist_urls.pop(i)
+            i += 1
+        
+        # remove first and last, since timerange is extended by one in both directions, for some unknown reason. NOT TESTED FULLY
         filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
 
         filelist = [url.split('/')[-1] for url in filelist_urls]
