@@ -44,15 +44,16 @@ def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
 
         # After sorting, any multiple versions are next to each other in ascending order.
         # If there are files with same dates, assume multiple versions -> pop the first one and repeat.
-        # Should end up with a list with highest version numbers. Magic number -5 is the index where 
+        # Should end up with a list with highest version numbers. Magic number -7 is the index where 
         # version number starts
         # As of 13.2.2025, no higher versions than v01 exist in either rad1_l2 or rad2_l2 directory
 
         i = 0
         while i < len(filelist_urls) - 1:
-            if filelist_urls[i+1][:-5] == filelist_urls[i][:-5]:
+            if filelist_urls[i+1][:-7] == filelist_urls[i][:-7]:
                 filelist_urls.pop(i)
-            i += 1
+            else:
+                i += 1
         
         # remove first and last, since timerange is extended by one in both directions, for some unknown reason. NOT TESTED FULLY
         filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
@@ -236,8 +237,6 @@ def plot_wind_waves(rad1_data, rad2_data, cmap='jet'):
     cbar = fig.colorbar(mesh2, ax=[ax_top, ax_bottom], orientation="vertical", pad=0.02, extend='both')
     cbar.set_label("PSD (V^2/Hz)", rotation=270, labelpad=12, fontsize=8)
     cbar.ax.tick_params(labelsize=7)
-
-    cbar.cmap.set_under('gray') # nothing is grayed out since fillvals are removed
 
     # Format time axis on the bottom subplot
     locator = AutoDateLocator()
