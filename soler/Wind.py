@@ -2,44 +2,83 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as colors
-from matplotlib.colors import ListedColormap
+
 from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
-#from scipy.interpolate import RegularGridInterpolator
+
 import cdflib
-import datetime as dt
-import cdaweb
+import os
+import sunpy
 
-#def fillvals_to_nan(array):
+from sunpy.net import Scraper
+from sunpy.time import TimeRange
+from sunpy.data.data_manager.downloader import ParfiveDownloader
 
-
-# def custom_cmap(cmap='Spectral'):
-#     cmap_spectral = plt.get_cmap(cmap, 256)
-#     colors_combined = np.vstack((
-#         [0.5, 0.5, 0.5, 1.0],  # color for <vmin
-#         cmap_spectral(np.linspace(0, 1, 256))
-#     ))
-#     return ListedColormap(colors_combined)
-
-###############################################################################
-# 1) Convert J2000 ns -> Python datetime
-###############################################################################
-def j2000_ns_to_datetime(ns_array):
+def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     """
-    Convert 'nanoseconds since 2000-01-01T12:00:00' (J2000)
-    into a numpy array of Python datetime objects.
+    Download a single Wind WAVES file (L2 only) with ParfiveDownloader class.
+
+    Parameters
+    ----------
+    sensor: str
+        RAD1 or RAD2 (lower case works as well)
+    startdate, enddate: str or dt
+        start and end dates as parse_time compatible strings or datetimes (see TimeRange docs)
+    path : str (optional)
+        Local download directory, defaults to sunpy's data directory
+    
+    Returns
+    -------
+    List of downloaded files
     """
-    j2000_ref = dt.datetime(2000, 1, 1, 12, 0, 0)
-    return np.array([
-        j2000_ref + dt.timedelta(seconds=(ns * 1e-9))
-        for ns in ns_array
-    ])
+    dl = ParfiveDownloader()
+    
+    timerange = TimeRange(startdate, enddate)
+
+    try:
+        pattern = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_{version}.cdf"
+
+        scrap = Scraper(pattern=pattern, sensor=sensor.lower(), version=".*")   # TODO pick highest version number
+
+        # for some reason includes the day preceding startdate, so just remove it
+        # also includes the enddate as well, remove that to keep the scheme consistent
+        filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
+
+        filelist = [url.split('/')[-1] for url in filelist_urls]
+
+        if path is None:
+            filelist = [sunpy.config.get('downloads', 'download_dir') + os.sep + file for file in filelist]
+        elif type(path) is str:
+            filelist = [path + os.sep + f for f in filelist]
+        downloaded_files = filelist
+
+        # Check if file with same name already exists in path
+        for url, f in zip(filelist_urls, filelist):
+            if os.path.exists(f) and os.path.getsize(f) == 0:
+                os.remove(f)
+            if not os.path.exists(f):
+                dl.download(url=url, path=f)
+
+    except (RuntimeError, IndexError):
+        print(f'Unable to obtain Wind WAVES {sensor} data for {startdate}-{enddate}!')
+        downloaded_files = []
+
+    return downloaded_files
 
 
-###############################################################################
-# 2) Read Wind/WAVES data (assuming freq is 1D or identical rows if 2D)
-###############################################################################
 def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP"):
+    """
+    Read Wind/WAVES data (assuming freq is 1D or identical rows if 2D)
 
+    Parameters
+    ----------
+    startdate, enddate : {datetime or str}
+        Datetime object (e.g., dt.date(2021,12,31) or dt.datetime(2021,4,15)) or
+        "standard" datetime string (e.g., "2021/04/15") (enddate must always be
+        later than startdate)
+    file_path : {str}, optional
+        File path as a string. Defaults to sunpy's default download directory
+
+    """
     rad1_data = []
     rad2_data = []
 
@@ -51,7 +90,7 @@ def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP")
         else:
             data = rad2_data
 
-        files = cdaweb.download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
+        files = download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
 
         # Read the frequency binning (assumed constant across all data)
         freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
@@ -69,7 +108,7 @@ def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP")
             
             # Time
             time_ns = cdf.varget("Epoch")  # shape (nTime,)
-            time_dt = j2000_ns_to_datetime(time_ns)
+            time_dt = cdflib.epochs.CDFepoch.to_datetime(time_ns)
             time_mpl = mdates.date2num(time_dt)
             
             # PSD shape (nTime, nFreq)

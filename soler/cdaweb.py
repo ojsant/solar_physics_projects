@@ -4,10 +4,6 @@ import sunpy
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
-from sunpy.net import Scraper
-from sunpy.time import TimeRange
-from sunpy.data.data_manager.downloader import ParfiveDownloader
-
 def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
     """
     Downloads dataset files via SunPy/Fido from CDAWeb
@@ -54,58 +50,3 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
         downloaded_files = []
     return downloaded_files
 
-# make this generally for any instrument? 
-def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
-    """
-    Download a single Wind WAVES file (L2 only) with ParfiveDownloader class.
-
-    Parameters
-    ----------
-    sensor: str
-        RAD1 or RAD2 (lower case works as well)
-    startdate, enddate: str or dt
-        start and end dates as parse_time compatible strings or datetimes (see TimeRange docs)
-    path : str (optional)
-        Local download directory, defaults to sunpy's data directory
-    
-    Returns
-    -------
-    List of downloaded files
-    """
-    dl = ParfiveDownloader()
-    
-    timerange = TimeRange(startdate, enddate)
-
-    try:
-        pattern = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves/{sensor}_l2/%Y/wi_l2_wav_{sensor}_%Y%m%d_{version}.cdf"
-
-        scrap = Scraper(pattern=pattern, sensor=sensor.lower(), version=".*")   # handles any version
-
-        # for some reason includes the day preceding startdate, so just remove it
-        # also includes the enddate as well, remove that to keep the scheme consistent
-        filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
-
-        filelist = [url.split('/')[-1] for url in filelist_urls]
-
-        if path is None:
-            filelist = [sunpy.config.get('downloads', 'download_dir') + os.sep + file for file in filelist]
-        elif type(path) is str:
-            filelist = [path + os.sep + f for f in filelist]
-        downloaded_files = filelist
-
-        # Check if file with same name already exists in path
-        for url, f in zip(filelist_urls, filelist):
-            if os.path.exists(f) and os.path.getsize(f) == 0:
-                os.remove(f)
-            if not os.path.exists(f):
-                dl.download(url=url, path=f)
-
-    except (RuntimeError, IndexError):
-        print(f'Unable to obtain Wind WAVES {sensor} data for {startdate}-{enddate}!')
-        downloaded_files = []
-        # in case of error, should probably clear the directory of any successful downloads? i dunno
-
-    return downloaded_files
-
-if __name__ == "__main__":
-    files = download_wind_waves_cdf("RAD1", "2024/04/19", "2024/04/21")
