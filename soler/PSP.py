@@ -10,23 +10,6 @@ from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 import cdflib
 import cdaweb
 
-PSP_LFR_VARS = {'epoch':'epoch_lfr_stokes', 'frequency':'frequency_lfr_stokes', 'psd':'psp_fld_l3_rfs_lfr_PSD_SFU'}
-PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 'psd':'psp_fld_l3_rfs_hfr_PSD_SFU'}
-
-
-###############################################################################
-# Function: Convert J2000 ns -> Python datetime
-###############################################################################
-# def j2000_ns_to_datetime(ns_array):
-#     """
-#     Convert 'nanoseconds since 2000-01-01T12:00:00' (J2000)
-#     into a numpy array of Python datetime objects.
-#     """
-#     j2000_ref = datetime.datetime(2000, 1, 1, 12, 0, 0)
-#     return np.array([
-#         j2000_ref + datetime.timedelta(seconds=(ns * 1e-9))
-#         for ns in ns_array
-#     ])
 
 
 def read_psp_fields_cdf(startdate, enddate, path=None):
@@ -49,10 +32,12 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
         3) intensities in sfu for each (time, frequency) data point
     """
 
-    # TODO If no end date is given, assume 1 day
+    PSP_LFR_VARS = {'epoch':'epoch_lfr_stokes', 'frequency':'frequency_lfr_stokes', 'psd':'psp_fld_l3_rfs_lfr_PSD_SFU'}
+    PSP_HFR_VARS = {'epoch':'epoch_hfr_stokes', 'frequency':'frequency_hfr_stokes', 'psd':'psp_fld_l3_rfs_hfr_PSD_SFU'}
 
     lfr_data = []
     hfr_data = []
+    
 
     datasets = ['PSP_FLD_L3_RFS_LFR', 'PSP_FLD_L3_RFS_HFR']
 
@@ -60,14 +45,14 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
         data = []
         if dataset == 'PSP_FLD_L3_RFS_LFR':
             data = lfr_data
-            var = PSP_LFR_VARS
+            variables = PSP_LFR_VARS
         else:
             data = hfr_data
-            var = PSP_HFR_VARS
+            variables = PSP_HFR_VARS
 
         files = cdaweb.cdaweb_download_fido(dataset=dataset, startdate=startdate, enddate=enddate, path=path)
 
-        freq  = cdflib.CDF(files[0]).varget(var['frequency'])     
+        freq  = cdflib.CDF(files[0]).varget(variables['frequency']) / 1e6 
 
         # PSP frequency array shape is (nTimeLFR, nFreqLFR)
         if freq.ndim == 2:
@@ -79,19 +64,16 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
 
         for file in files:
             cdf_file = cdflib.CDF(file)
-            time_ns_1day  = cdf_file.varget(var['epoch'])         # shape: (nTimeLFR,)
-            psd_sfu_1day  = cdf_file.varget(var['psd'])           # shape: (nTimeLFR, nFreqLFR)
+            time_ns_1day  = cdf_file.varget(variables['epoch'])         # shape: (nTimeLFR,)
+            psd_sfu_1day  = cdf_file.varget(variables['psd'])           # shape: (nTimeLFR, nFreqLFR)
 
-            # cdf_lfr.close()  # I think this is outdated
-            # Remove bar-like artifacts from PSP high frequency data (pcolormesh extends non-NaN values over timejumps)
-            if var == PSP_HFR_VARS:
-                # for each time step except the last one:
-                for i in range(len(time_ns_1day)-1):
-                    # check if time increases by more than 60s:
-                    if time_ns_1day[i+1]-time_ns_1day[i] > 60000000000:
-                        psd_sfu_1day[i,:] = np.nan
+            # remove bar artifacts caused by non-NaN values before time jumps
+            # for each time step except the last one:
+            for i in range(len(time_ns_1day)-1):
+                # check if time increases by more than 60s:
+                if time_ns_1day[i+1]-time_ns_1day[i] > 60000000000:
+                    psd_sfu_1day[i,:] = np.nan
 
-            # time_lfr_dt  = j2000_ns_to_datetime(time_lfr_ns)
             time_dt  = cdflib.epochs.CDFepoch.to_datetime(time_ns_1day)
             time_mpl = mdates.date2num(time_dt)
 
@@ -107,7 +89,7 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
     return lfr_data, hfr_data
 
 
-def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
+def plot_psp_fields(lfr_data, hfr_data, t_lims=None, cmap='jet'):
     """
     Plot PSP FIELDS data (both LFR and HFR). 
     """
@@ -121,16 +103,6 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
     TimeLFR2D, FreqLFR2D = np.meshgrid(time_lfr_mpl, freq_lfr_mhz, indexing='ij')
     TimeHFR2D, FreqHFR2D = np.meshgrid(time_hfr_mpl, freq_hfr_mhz, indexing='ij')
 
-    ###############################################################################
-    # Custom colormap: gray for data < vmin, then Spectral/jet/whatever
-    ###############################################################################
-    # cmap = plt.get_cmap(cmap, 256)   
-    # colors_combined = np.vstack((
-    #     [0.5, 0.5, 0.5, 1.0], 
-    #     cmap(np.linspace(0, 1, 256))
-    # ))
-    # custom_cmap = ListedColormap(colors_combined)
-
     # Log scale range
     vmin, vmax = 500, 1e7
     log_norm = colors.LogNorm(vmin=vmin, vmax=vmax)
@@ -138,8 +110,8 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
     ###############################################################################
     # Create figure: 2 subplots, no vertical space between them
     ###############################################################################
-    fig, (ax_hfr, ax_lfr) = plt.subplots(
-        nrows=2, ncols=1,
+    fig, ax = plt.subplots(
+        nrows=1, ncols=1,
         figsize=(10, 6),
         dpi=150,
         sharex=True
@@ -155,7 +127,7 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
     ###############################################################################
     # Plot HFR on top
     ###############################################################################
-    mesh_hfr = ax_hfr.pcolormesh(
+    mesh_hfr = ax.pcolormesh(
         TimeHFR2D,
         FreqHFR2D,
         psd_hfr_sfu,
@@ -163,17 +135,17 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
         cmap=cmap,
         norm=log_norm
     )
-    ax_hfr.set_yscale('log')
-    ax_hfr.set_ylabel("HFR (MHz)", fontsize=8)
-    ax_hfr.tick_params(axis='both', which='major', labelsize=8)
+    ax.set_yscale('log')
+    ax.set_ylabel("Frequency (MHz)", fontsize=8)
+    ax.tick_params(axis='both', which='major', labelsize=8)
 
     
-    ax_hfr.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
+    ax.set_title("Parker Solar Probe FIELDS/RFS", fontsize=9)
 
     ###############################################################################
     # Plot LFR on bottom
     ###############################################################################
-    mesh_lfr = ax_lfr.pcolormesh(
+    mesh_lfr = ax.pcolormesh(
         TimeLFR2D,
         FreqLFR2D,
         psd_lfr_sfu,
@@ -181,48 +153,49 @@ def plot_psp_fields(lfr_data, hfr_data, cmap='jet'):
         cmap=cmap,
         norm=log_norm
     )
-    ax_lfr.set_yscale('log')
-    ax_lfr.set_ylabel("LFR (MHz)", fontsize=8)
-    ax_lfr.set_xlabel("Time (UTC)", fontsize=8)
-    ax_lfr.tick_params(axis='both', which='major', labelsize=8)
 
     
     ###############################################################################
     # Single colorbar on right
     ###############################################################################
-    cbar = fig.colorbar(mesh_lfr, ax=[ax_hfr, ax_lfr],
+    cbar = fig.colorbar(mesh_lfr, ax=ax,
                         orientation="vertical",
                         pad=0.02,
                         extend='both', extendfrac='auto')
     cbar.set_label("Intensity (sfu)", rotation=270, labelpad=10, fontsize=8)
     cbar.ax.tick_params(labelsize=7)
-    #cbar.cmap.set_under('gray')
 
     ###############################################################################
     # Use AutoDateLocator + ConciseDateFormatter, but no rotation on ticks
     ###############################################################################
     locator = AutoDateLocator()
     formatter = ConciseDateFormatter(locator)
-    ax_lfr.xaxis.set_major_locator(locator)
-    ax_lfr.xaxis.set_major_formatter(formatter)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
 
     # We do NOT rotate the ticklabels (no overlap is guaranteed only if
     # your time range is not too large)
-    for label in ax_lfr.get_xticklabels(which='major'):
+    for label in ax.get_xticklabels(which='major'):
         label.set(rotation=0, ha='center')
 
     # Set the x-range
-    ax_lfr.set_xlim(time_lfr_mpl[0], time_lfr_mpl[-1])
-
+    if t_lims is None:
+        ax.set_xlim(time_lfr_mpl[0], time_lfr_mpl[-1])
+    else:
+        tr = TimeRange(t_lims)
+        start_mpl = mdates.date2num(tr.start.to_datetime())
+        end_mpl = mdates.date2num(tr.end.to_datetime())
+        ax.set_xlim(start_mpl, end_mpl)
+        
     plt.show()
 
 
 if __name__ == "__main__":
 
-    startdate = "2023/04/17"
-    enddate   = "2023/04/19"
+    startdate = "2023/04/17 12:00"
+    enddate   = "2023/04/18 16:00"
 
     lfr_data, hfr_data = read_psp_fields_cdf(startdate, enddate)
 
-    plot_psp_fields(lfr_data, hfr_data)
+    plot_psp_fields(lfr_data, hfr_data, t_lims=(startdate, enddate))
 
