@@ -36,19 +36,18 @@ plt.rcParams['ytick.labelsize'] = 15
 plt.rc('axes', titlesize=20)  # fontsize of the axes title
 plt.rc('axes', labelsize=20)  # fontsize of the x and y labels
 plt.rcParams['agg.path.chunksize'] = 20000
+
 import ipywidgets as w
 import seppy.tools.widgets as seppyw
 
-
-# plot_options = ["RFS", "STIX", "EPI-lo", "EPI_hi", "MAG angles", "MAG", "V_sw", "N", "T", "P_dyn", "Polarity"]
-# option_list = [w.Checkbox(value=False, description=quant) for quant in plot_options]
-
-
-# def checklist(self):
-#     for option in plot_options:
-#         display(option)
-
-
+class GUI():
+    def __init__(self):
+        self._options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
+        self._boxes = dict(zip([w.Checkbox(value=False, description=quant, indent=False) for quant in self._options], self._options))
+        for option in self._boxes.keys():
+            display(self._boxes[option])
+    
+    
 
 def load_data(opt):
     """
@@ -66,6 +65,14 @@ def load_data(opt):
     list of dataframes
 
     """
+    
+
+    data = {}
+
+    #####################################################################
+    ######## Data loading ###############################################
+    #####################################################################
+
     if opt["plot_epilo_e"] or opt["plot_epihi_e"]:
         opt["plot_electrons"] = True
     else:
@@ -76,8 +83,6 @@ def load_data(opt):
     else:
         opt["plot_protons"] = False
 
-    data = {}
-
     if opt["plot_stix"]:
         if opt["enddate"]-opt["startdate"] > dt.timedelta(days=7):
             print('WARNING: STIX loading for more than 7 days not supported at the moment!')
@@ -86,17 +91,21 @@ def load_data(opt):
         data["stix_orig"] = lc.to_pandas()
         
     if opt["plot_epihi_p"] or opt["plot_epihi_e"]:
-        data["psp_het_org"], data["psp_het_energies"] = psp_isois_load('PSP_ISOIS-EPIHI_L2-HET-RATES60', opt["startdate"], opt["enddate"], path=opt["file_path"], resample=None)
-        
+        data["psp_het_org"], data["psp_het_energies"] = psp_isois_load('PSP_ISOIS-EPIHI_L2-HET-RATES60', opt["startdate"], opt["enddate"], 
+                                                                       path=opt["file_path"], resample=None)
 
     if opt["plot_epilo_e"]:
-        data["psp_epilo_org"], data["psp_epilo_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-PE', opt["startdate"], opt["enddate"], path=opt["file_path"], resample=None, epilo_channel=opt["epilo_channel"], epilo_threshold=None)
+        data["psp_epilo_org"], data["psp_epilo_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-PE', opt["startdate"], opt["enddate"], 
+                                                                               path=opt["file_path"], resample=None, epilo_channel=opt["epilo_channel"], 
+                                                                               epilo_threshold=None)
         electron_countrate_keys = data["psp_epilo_org"].filter(like='Electron_CountRate_ChanF_E').keys()
         data["psp_epilo_org"][electron_countrate_keys] = data["psp_epilo_org"][electron_countrate_keys].mask(data["psp_epilo_org"][electron_countrate_keys] < 0.0)
         
 
     if opt["plot_epilo_p"]:
-        data["psp_epilo_ic_org"], data["psp_epilo_ic_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-IC', opt["startdate"], opt["enddate"], path=opt["file_path"], resample=None, epilo_channel=opt["epilo_ic_channel"], epilo_threshold=None)
+        data["psp_epilo_ic_org"], data["psp_epilo_ic_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-IC', opt["startdate"], opt["enddate"], 
+                                                                                     path=opt["file_path"], resample=None, epilo_channel=opt["epilo_ic_channel"], 
+                                                                                     epilo_threshold=None)
 
     if opt["plot_rfs"]:
         psp_rfs_lfr_psd = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSP_FLD.RFS_LFR.PSP_FLD_L3_RFS_LFR.psp_fld_l3_rfs_lfr_PSD_SFU,
@@ -134,7 +143,10 @@ def load_data(opt):
         data["psp_mag"]['phi2'] = phi
 
 
-    ### Resampling
+
+    #################################################################
+    ############## Resampling #######################################
+    #################################################################
 
     if opt["resample"] is not None:
         if opt["plot_epihi_e"] or opt["plot_epihi_p"]:
@@ -182,6 +194,12 @@ def load_data(opt):
                 for i in range(len(data["psp_rfs_hfr_psd"].index) - 1):
                     if (data["psp_rfs_hfr_psd"].index[i+1] - data["psp_rfs_hfr_psd"].index[i]) > np.timedelta64(5, "m"):
                         data["psp_rfs_hfr_psd"].iloc[i,:] = np.nan
+
+
+
+    ############################################################################
+    ############## Energy channel ranges #######################################
+    ############################################################################
 
     if opt["plot_protons"]:  
         #Channels list
@@ -328,7 +346,7 @@ def make_plot(data, opt):
                 axs[i].set_prop_cycle('color', plt.cm.Greys_r(np.linspace(0, 1, len(comb_channels)+5)))
                 for channel in comb_channels:
                     df_psp_epihi, df_psp_epihi_name = calc_av_en_flux_PSP_EPIHI(data["psp_het"], data["psp_het_energies"], channel, 'p', 'het', opt["psp_het_viewing"])
-                    axs[i].plot(df_psp_epihi.index, df_psp_epihi.flux, label=f'HET {opt["psp_het_viewing"]} {df_psp_epihi_name}', lw=1, ds="steps-mid")
+                    axs[i].plot(df_psp_epihi.index, df_psp_epihi.flux, label=f'HET {opt["psp_het_viewing"]}{df_psp_epihi_name}', lw=1, ds="steps-mid")
             else:
                 axs[i].set_prop_cycle('color', plt.cm.plasma(np.linspace(0, 1, len(opt["channels_n_psp_het_p"])+color_offset)))
                 for channel in opt["channels_n_psp_het_p"]:
@@ -478,57 +496,4 @@ def make_plot(data, opt):
     plt.show()
 
 
-
-if __name__ == "__main__":
-    opt = {}
-
-    # Timestamp position
-    opt["pos_timestamp"] = None
-
-    # Path to save data (optional, defaults to sunpy data directory)
-    opt["file_path"] = None
-
-    opt["year"] = 2022
-    opt["startdate"] = dt.datetime(opt["year"], 3, 13, 12, 00)
-    opt["enddate"] = dt.datetime(opt["year"], 3, 15, 12, 00)
-
-    opt["plot_rfs"] = True
-    opt["plot_stix"] = True
-    opt["plot_epilo_e"] = True
-    opt["plot_epihi_e"] = True
-    opt["plot_epilo_p"] = True
-    opt["plot_epihi_p"] = True
-    # plot_psp_pixel = True
-    opt["plot_epihi_p_combined_pixels"] = True
-
-    opt["plot_mag_angles"] = True 
-    opt["plot_mag"] = True
-    opt["plot_Vsw"] = False
-    opt["plot_N"] = False
-    opt["plot_T"] = False
-    opt["plot_p_dyn"] = False
-    opt["plot_polarity"] = False 
-
-    opt["legends_inside"] = False
-
-    opt["resample"] = "5min"
-    opt["resample_mag"] = '1min'
-
-    opt["psp_het_viewing"] = 'A'  # 'A' or 'B'?
-
-    opt["epilo_channel"] = 'F'
-    opt["epilo_viewing"] = '3'
-    opt["epilo_ic_channel"] = 'T'
-    opt["epilo_ic_viewing"] = '3'
-
-    opt["stix_ltc"] = False  # correct SolO/STIX data for light travel time
-
-    # Choose every nth energy channel
-    opt["n_psp_het_e"] = 2
-    opt["n_psp_het_p"] = 2
-    opt["n_psp_epilo_e"] = 1
-    opt["n_psp_epilo_ic"] = 4
-
-    data, opt = load_data(opt)
-    make_plot(data, opt)
     

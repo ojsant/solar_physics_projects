@@ -4,6 +4,7 @@ import matplotlib.dates as mdates
 import matplotlib.colors as colors
 
 from sunpy.time import TimeRange
+from seppy.tools import resample_df
 
 from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 
@@ -52,13 +53,13 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
 
         files = cdaweb.cdaweb_download_fido(dataset=dataset, startdate=startdate, enddate=enddate, path=path)
 
-        freq  = cdflib.CDF(files[0]).varget(variables['frequency']) / 1e6 
+        freq_mhz  = cdflib.CDF(files[0]).varget(variables['frequency']) / 1e6 
 
         # PSP frequency array shape is (nTimeLFR, nFreqLFR)
-        if freq.ndim == 2:
-            freq = freq[0, :]
+        if freq_mhz.ndim == 2:
+            freq_mhz = freq_mhz[0, :]
 
-        psd_sfu = np.empty(shape=(0,len(freq)))
+        psd_sfu = np.empty(shape=(0,len(freq_mhz)))
         time = np.array([])
 
 
@@ -83,7 +84,7 @@ def read_psp_fields_cdf(startdate, enddate, path=None):
         psd_sfu = psd_sfu[:-1,:-1]     # remove last row and column
 
         data.append(time)
-        data.append(freq)
+        data.append(freq_mhz)
         data.append(psd_sfu)
 
     return lfr_data, hfr_data

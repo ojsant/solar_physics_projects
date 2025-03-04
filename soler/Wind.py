@@ -15,7 +15,7 @@ from sunpy.data.data_manager.downloader import ParfiveDownloader
 
 def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     """
-    Download a single Wind WAVES file (L2 only) with ParfiveDownloader class.
+    Download Wind WAVES L2 data files for given time range.
 
     Parameters
     ----------
@@ -54,9 +54,6 @@ def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
                 filelist_urls.pop(i)
             else:
                 i += 1
-        
-        # remove first and last, since timerange is extended by one in both directions, for some unknown reason. NOT TESTED FULLY
-        filelist_urls = scrap.filelist(timerange=timerange)[1:-1]
 
         filelist = [url.split('/')[-1] for url in filelist_urls]
 
@@ -175,7 +172,7 @@ def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP")
     return rad1_data, rad2_data
 
 
-def plot_wind_waves(rad1_data, rad2_data, cmap='jet'):
+def plot_wind_waves(rad1_data, rad2_data, t_lims=None, cmap='jet'):
     """
     Plot Wind WAVES data (both RAD1 and RAD2).
     """
@@ -246,13 +243,20 @@ def plot_wind_waves(rad1_data, rad2_data, cmap='jet'):
     for label in ax_bottom.get_xticklabels(which='major'):
         label.set(rotation=0, ha='center')
 
-    ax_bottom.set_xlim(time_rad1_mpl[0], time_rad1_mpl[-1])
+    if t_lims is None:
+        ax_bottom.set_xlim(time_rad1_mpl[0], time_rad1_mpl[-1])
+    else:
+        tr = TimeRange(t_lims)
+        start_mpl = mdates.date2num(tr.start.to_datetime())
+        end_mpl = mdates.date2num(tr.end.to_datetime())
+        ax_bottom.set_xlim(start_mpl, end_mpl)
 
     plt.show()
 
 if __name__ == "__main__":
 
-    startdate = "2023/04/17"
-    enddate   = "2023/04/19"
+    startdate = "2024/06/17"
+    enddate   = "2024/06/18"
+
     rad1, rad2 = read_wind_waves_cdf(startdate=startdate, enddate=enddate)
     plot_wind_waves(rad1, rad2)

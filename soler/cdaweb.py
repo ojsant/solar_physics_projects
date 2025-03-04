@@ -1,5 +1,6 @@
 import os
 import sunpy
+import cdflib
 
 from sunpy.net import Fido
 from sunpy.net import attrs as a
@@ -49,4 +50,9 @@ def cdaweb_download_fido(dataset, startdate, enddate, path=None, max_conn=5):
         print(f'Unable to obtain "{dataset}" data for {startdate}-{enddate}!')
         downloaded_files = []
     return downloaded_files
+
+if __name__ == "__main__":
+    files = cdaweb_download_fido("PSP_FLD_L3_RFS_HFR", "2023/02/01", "2023/02/02")
+    cdf = cdflib.CDF(files[0])
+    print(cdf.cdf_info())
 
