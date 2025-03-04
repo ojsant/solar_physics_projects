@@ -26,6 +26,8 @@ from polarity_plotting import polarity_rtn
 os.environ['SPEASY_CORE_DISABLED_PROVIDERS'] = "sscweb,archive,csa"
 import speasy as spz
 
+from IPython.core.display import display
+
 # omit Pandas' PerformanceWarning
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
@@ -107,22 +109,34 @@ def load_data(opt):
                                                                                      path=opt["file_path"], resample=None, epilo_channel=opt["epilo_ic_channel"], 
                                                                                      epilo_threshold=None)
 
-    if opt["plot_rfs"]:
+    if opt["plot_radio"]:
         psp_rfs_lfr_psd = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSP_FLD.RFS_LFR.PSP_FLD_L3_RFS_LFR.psp_fld_l3_rfs_lfr_PSD_SFU,
                                         opt["startdate"], opt["enddate"]).replace_fillval_by_nan()
         psp_rfs_hfr_psd = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSP_FLD.RFS_HFR.PSP_FLD_L3_RFS_HFR.psp_fld_l3_rfs_hfr_PSD_SFU, 
                                         opt["startdate"], opt["enddate"]).replace_fillval_by_nan()
 
-        # Get frequency bins, since metadata is lost upon conversion to df
-        psp_rfs_lfr_freq = psp_rfs_lfr_psd.axes[1].values[0] / 1e6  # in MHz
+        # Get frequency (MHz) bins, since metadata is lost upon conversion to df
+        psp_rfs_lfr_freq = psp_rfs_lfr_psd.axes[1].values[0] / 1e6     
         psp_rfs_hfr_freq = psp_rfs_hfr_psd.axes[1].values[0] / 1e6
 
-        df_psp_rfs_lfr_psd_o = psp_rfs_lfr_psd.to_dataframe()
-        df_psp_rfs_hfr_psd_o = psp_rfs_hfr_psd.to_dataframe()
+        # frequencies overlap, so leave the last seven out
+        data["psp_rfs_lfr_psd"] = psp_rfs_lfr_psd.to_dataframe().iloc[:,:-6]
+        data["psp_rfs_hfr_psd"] = psp_rfs_hfr_psd.to_dataframe()
+        print(data["psp_rfs_lfr_psd"].shape)
 
+
+        print(data["psp_rfs_lfr_psd"].shape)
         # put frequencies into column names for easier access
-        df_psp_rfs_lfr_psd_o.columns = psp_rfs_lfr_freq
-        df_psp_rfs_hfr_psd_o.columns = psp_rfs_hfr_freq
+        data["psp_rfs_lfr_psd"].columns = psp_rfs_lfr_freq[:-6]
+        data["psp_rfs_hfr_psd"].columns = psp_rfs_hfr_freq
+
+        # Remove bar artifacts caused by non-NaN values before time jumps
+        for i in range(len(data["psp_rfs_lfr_psd"].index) - 1):
+            if (data["psp_rfs_lfr_psd"].index[i+1] - data["psp_rfs_lfr_psd"].index[i]) > np.timedelta64(5, "m"):   
+                data["psp_rfs_lfr_psd"].iloc[i,:] = np.nan
+        for i in range(len(data["psp_rfs_hfr_psd"].index) - 1):
+            if (data["psp_rfs_hfr_psd"].index[i+1] - data["psp_rfs_hfr_psd"].index[i]) > np.timedelta64(5, "m"):
+                data["psp_rfs_hfr_psd"].iloc[i,:] = np.nan
 
     if opt["plot_mag"]:
         df_psp_mag_rtn = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.FIELDS_MAG.psp_mag_1min.psp_b_1min, 
@@ -164,9 +178,7 @@ def load_data(opt):
             data["mag"] = resample_df(data["psp_mag"], opt["resample_mag"]) 
         if opt["plot_stix"]:
             data["stix"] = resample_df(data["stix_orig"], opt["resample"])
-        if opt["plot_rfs"]:
-            data["psp_rfs_hfr_psd"] = resample_df(df_psp_rfs_hfr_psd_o, opt["resample"], origin="start_day")
-            data["psp_rfs_lfr_psd"] = resample_df(df_psp_rfs_lfr_psd_o, opt["resample"], origin="start_day")
+    
         
         else:
             if opt["plot_epihi_e"] or opt["plot_epihi_p"]:
@@ -184,16 +196,8 @@ def load_data(opt):
                 data["mag"] = data["psp_mag"]
             if opt["plot_stix"]:
                 data["stix"] = data["stix_orig"]
-            if opt["plot_rfs"]:
-                data["psp_rfs_hfr_psd"] = df_psp_rfs_hfr_psd_o
-                data["psp_rfs_lfr_psd"] = df_psp_rfs_lfr_psd_o
-                # Remove bar artifacts caused by non-NaN values before time jumps
-                for i in range(len(data["psp_rfs_lfr_psd"].index) - 1):
-                    if (data["psp_rfs_lfr_psd"].index[i+1] - data["psp_rfs_lfr_psd"].index[i]) > np.timedelta64(5, "m"):   
-                        data["psp_rfs_lfr_psd"].iloc[i,:] = np.nan
-                for i in range(len(data["psp_rfs_hfr_psd"].index) - 1):
-                    if (data["psp_rfs_hfr_psd"].index[i+1] - data["psp_rfs_hfr_psd"].index[i]) > np.timedelta64(5, "m"):
-                        data["psp_rfs_hfr_psd"].iloc[i,:] = np.nan
+    
+                
 
 
 
@@ -227,18 +231,18 @@ def make_plot(data, opt):
     Plot chosen data with user-specified parameters.
     """
 
-    panels = 1*opt["plot_rfs"] + 1*opt["plot_stix"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] #+ 1*plot_Vsw + 1*plot_N + 1*plot_T + 1*plot_p_dyn 
+    panels = 1*opt["plot_radio"] + 1*opt["plot_stix"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] #+ 1*plot_Vsw + 1*plot_N + 1*plot_T + 1*plot_p_dyn 
 
     panel_ratios = list(np.zeros(panels)+1)
 
-    if opt["plot_rfs"]:
+    if opt["plot_radio"]:
         panel_ratios[0] = 2
 
     if opt["plot_electrons"] and opt["plot_protons"]:
-        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_rfs"]] = 2
-        panel_ratios[1+1*opt["plot_stix"]+1*opt["plot_rfs"]] = 2
+        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
+        panel_ratios[1+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
     if opt["plot_electrons"] or opt["plot_protons"]:    
-        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_rfs"]] = 2
+        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
 
     FONT_YLABEL = 20
     FONT_LEGEND = 10
@@ -252,7 +256,7 @@ def make_plot(data, opt):
     
     i = 0
 
-    if opt["plot_rfs"]:
+    if opt["plot_radio"]:
         vmin, vmax = 500, 1e7
         log_norm = LogNorm(vmin=vmin, vmax=vmax)
         
@@ -485,7 +489,7 @@ def make_plot(data, opt):
     #axs[-1].set_xlabel(f"Date in {year}/  Time (UTC)", fontsize=15)
     #axs[-1].set_xlim(startdate, enddate)
     axs[0].set_title(f'Parker Solar Probe', ha='center')
-    axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%m-%d'))
+    axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%b %d'))
     axs[-1].xaxis.set_tick_params(rotation=0)
     axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["year"]}")#, fontsize=15)
     axs[-1].set_xlim(opt["startdate"], opt["enddate"])
