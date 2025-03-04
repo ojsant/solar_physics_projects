@@ -31,6 +31,10 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib import cm
 
+import ipywidgets as w
+
+from IPython.core.display import display
+
 from my_func_py3 import mag_angles, polarity_rtn, resample_df
 from polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
 from Wind_merged import load_waves_rad
@@ -68,6 +72,13 @@ def wind_mfi_loader(startdate, enddate):
     df['B'] = np.sqrt(df['BRTN_0'].values**2+df['BRTN_1'].values**2 +df['BRTN_2'].values**2)
     # return concat_df
     return  df
+
+
+def selection():
+    options = ["ERNE", "EPHIN", "WIND", "Radio", "Electrons", "Protons", "Pad?", "Mag angles", "Mag", "V_sw", "N", "T", "Polarity"]
+    boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
+    for option in options:
+        display(boxes[option])
 
 
 def load_data(opt):
@@ -246,8 +257,7 @@ def make_plot(data, opt):
         ax.set_yscale('log')
         i += 1
 
-        
-        
+    
     if opt["plot_mag"]:    
         ax = axs[i]
         ax.plot(data["mag_df"].index, data["mag_df"].B.values, label='B', color='k', linewidth=1)

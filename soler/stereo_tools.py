@@ -29,12 +29,24 @@ from seppy.util import resample_df
 from sunpy.coordinates import get_horizons_coord
 from sunpy.coordinates import frames
 
+import ipywidgets as w
+from IPython.core.display import display
+
 from my_func_py3 import mag_angles
 from polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
 from STEREO import load_swaves
 
 # omit Pandas' PerformanceWarning
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
+
+
+
+def selection():
+    options = ["Radio", "Electrons", "Protons", "Pad?", "Mag angles", "Mag", "V_sw", "N", "T", "Polarity", "HET"]
+    boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
+    for option in options:
+        display(boxes[option])
+
 
 def load_data(opt):
 
@@ -275,7 +287,7 @@ def make_plot(data, opt):
     if opt["plot_N"]:
         axs[i].plot(data["df_magplas"].index, data["df_magplas"].Np,
                     '-k', label="Ion density")
-        axs[i].set_ylabel("N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=font_ylabel)
+        axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=font_ylabel)
         i += 1
 
     ### Sws

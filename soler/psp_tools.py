@@ -42,12 +42,11 @@ plt.rcParams['agg.path.chunksize'] = 20000
 import ipywidgets as w
 import seppy.tools.widgets as seppyw
 
-class GUI():
-    def __init__(self):
-        self._options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
-        self._boxes = dict(zip([w.Checkbox(value=False, description=quant, indent=False) for quant in self._options], self._options))
-        for option in self._boxes.keys():
-            display(self._boxes[option])
+def selection():
+    options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
+    boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
+    for option in options:
+        display(boxes[option])
     
     
 
@@ -122,10 +121,7 @@ def load_data(opt):
         # frequencies overlap, so leave the last seven out
         data["psp_rfs_lfr_psd"] = psp_rfs_lfr_psd.to_dataframe().iloc[:,:-6]
         data["psp_rfs_hfr_psd"] = psp_rfs_hfr_psd.to_dataframe()
-        print(data["psp_rfs_lfr_psd"].shape)
-
-
-        print(data["psp_rfs_lfr_psd"].shape)
+    
         # put frequencies into column names for easier access
         data["psp_rfs_lfr_psd"].columns = psp_rfs_lfr_freq[:-6]
         data["psp_rfs_hfr_psd"].columns = psp_rfs_hfr_freq
@@ -491,7 +487,7 @@ def make_plot(data, opt):
     axs[0].set_title(f'Parker Solar Probe', ha='center')
     axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%b %d'))
     axs[-1].xaxis.set_tick_params(rotation=0)
-    axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["year"]}")#, fontsize=15)
+    axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["startdate"].year}")#, fontsize=15)
     axs[-1].set_xlim(opt["startdate"], opt["enddate"])
     
     #plt.tight_layout()
