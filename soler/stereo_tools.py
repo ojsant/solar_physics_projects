@@ -294,14 +294,6 @@ def make_plot(data, opt):
     axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["startdate"].year}", fontsize=15)
     axs[-1].set_xlim(opt["startdate"], opt["enddate"])
 
-    #line = dt.datetime(year, 3, 15, 1)
-    # line = dt.datetime(opt["startdate"].year, 3, 13, 3, 15)
-
-    # plot_line = True
-    # for ax in axs:
-    #     #ax.tick_params(axis='both', labelsize=12)
-    #     if opt["plot_lines"]:
-    #         ax.axvline(x=line, color='k', linestyle='--')
     #plt.tight_layout()
     #fig.set_size_inches(12,15)
     fig.patch.set_facecolor('white')

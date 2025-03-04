@@ -78,7 +78,7 @@ def download_wind_waves_cdf(sensor, startdate, enddate, path=None):
     return downloaded_files
 
 
-def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP"):
+def load_waves_rad(dataset, startdate, enddate, file_path=None):
     """
     Read Wind/WAVES data (assuming freq is 1D or identical rows if 2D)
 
@@ -92,101 +92,82 @@ def read_wind_waves_cdf(startdate, enddate, file_path=None, psd_var="PSD_V2_SP")
         File path as a string. Defaults to sunpy's default download directory
 
     """
-    rad1_data = []
-    rad2_data = []
+    
+    files = download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
 
-    datasets = ["RAD1", "RAD2"]
+    # Read the frequency binning (assumed constant across all data)
+    freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
 
-    for dataset in datasets:
-        if dataset == "RAD1":
-            data = rad1_data
-        else:
-            data = rad2_data
+    # If freq is 2D but each row is identical, take freq_raw[0,:]
+    if freq_hz.ndim == 2:
+        freq_hz = freq_hz[0, :]
+    
+    psd_v2hz = np.empty(shape=(0,len(freq_hz))) 
+    time_dt = np.array([], dtype="datetime64")
 
-        files = download_wind_waves_cdf(dataset, startdate, enddate, path=file_path)
+    # append data 
+    for file in files:
+        cdf = cdflib.CDF(file)
 
-        # Read the frequency binning (assumed constant across all data)
-        freq_hz  = cdflib.CDF(files[0]).varget("FREQUENCY")
+        # PSD shape (nTime, nFreq)
+        psd_raw = cdf.varget("PSD_V2_SP")
+        # Time
+        time_ns = cdf.varget("Epoch")  # shape (nTime,)
 
-        # If freq is 2D but each row is identical, take freq_raw[0,:]
-        if freq_hz.ndim == 2:
-            freq_hz = freq_hz[0, :]
-        
-        psd_v2hz = np.empty(shape=(0,len(freq_hz))) 
-        time = np.array([], dtype="int64")
+        time_dt = np.append(time_dt, cdflib.epochs.CDFepoch.to_datetime(time_ns))
 
-        # append data 
-        for file in files:
-            cdf = cdflib.CDF(file)
+        psd_v2hz = np.append(psd_v2hz, psd_raw, axis=0)
 
-            # PSD shape (nTime, nFreq)
-            psd_raw = cdf.varget(psd_var)
-            # Time
-            time_ns = cdf.varget("Epoch")  # shape (nTime,)
+    # remove bar artifacts caused by non-NaN values before time jumps
+    # for each time step except the last one:
+    for i in range(len(time_dt)-1):
+        # check if time increases by more than 5 min:
+        if time_dt[i+1] - time_dt[i] > np.timedelta64(5, "m"):
+            psd_v2hz[i,:] = np.nan
 
-            time = np.append(time, time_ns)
-            psd_v2hz = np.append(psd_v2hz, psd_raw, axis=0)
+    # Some files use a fill value ~ -9.9999998e+30
+    fill_val = -9.999999848243207e+30
+    valid_mask = (freq_hz > 0) & (freq_hz != fill_val) 
+    freq_hz = freq_hz[valid_mask]
+    psd_v2hz = psd_v2hz[:, valid_mask]
 
-        # remove bar artifacts caused by non-NaN values before time jumps
-        # for each time step except the last one:
-        for i in range(len(time)-1):
-            # check if time increases by more than 60s:
-            if time[i+1] - time[i] > 60000000000:
-                psd_v2hz[i,:] = np.nan
-        
-        # Time conversion
-        time_dt = cdflib.epochs.CDFepoch.to_datetime(time)
-        time = mdates.date2num(time_dt)
+    # Convert frequency to MHz
+    freq_mhz = freq_hz / 1e6
 
-        # Some files use a fill value ~ -9.9999998e+30
-        fill_val = -9.999999848243207e+30
-        valid_mask = (freq_hz > 0) & (freq_hz != fill_val) 
-        freq_hz = freq_hz[valid_mask]
-        psd_v2hz = psd_v2hz[:, valid_mask]
+    # Sort time
+    if not sorted(time_dt):
+        idx_t = np.argsort(time_dt)
+        time_dt = time_dt[idx_t]
+        psd_v2hz  = psd_v2hz[idx_t, :]
 
-        # Convert frequency to MHz
-        freq_mhz = freq_hz / 1e6
+    # Remove duplicate times
+    t_unique, t_uidx = np.unique(time_dt, return_index=True)
+    if len(t_unique) < len(time_dt):
+        time_dt = t_unique
+        psd_v2hz  = psd_v2hz[t_uidx, :]
 
-        # Sort time
-        if not sorted(time):
-            idx_t = np.argsort(time)
-            time = time[idx_t]
-            psd_v2hz  = psd_v2hz[idx_t, :]
+    # Sort freq
+    if not sorted(freq_mhz):
+        idx_f = np.argsort(freq_mhz)
+        freq_mhz = freq_mhz[idx_f]
+        psd_v2hz  = psd_v2hz[:, idx_f]
 
-        # Remove duplicate times
-        t_unique, t_uidx = np.unique(time, return_index=True)
-        if len(t_unique) < len(time):
-            time = t_unique
-            psd_v2hz  = psd_v2hz[t_uidx, :]
+    # Remove duplicate freqs
+    f_unique, f_uidx = np.unique(freq_mhz, return_index=True)
+    if len(f_unique) < len(freq_mhz):
+        freq_mhz = f_unique
+        psd_v2hz  = psd_v2hz[:, f_uidx]
 
-        # Sort freq
-        if not sorted(freq_mhz):
-            idx_f = np.argsort(freq_mhz)
-            freq_mhz = freq_mhz[idx_f]
-            psd_v2hz  = psd_v2hz[:, idx_f]
+    data = pd.DataFrame(psd_v2hz, index=time_dt, columns=freq_mhz)
 
-        # Remove duplicate freqs
-        f_unique, f_uidx = np.unique(freq_mhz, return_index=True)
-        if len(f_unique) < len(freq_mhz):
-            freq_mhz = f_unique
-            psd_v2hz  = psd_v2hz[:, f_uidx]
-
-        data.append(time)
-        data.append(freq_mhz)
-        data.append(psd_v2hz)
-
-    df_rad1_data = pd.DataFrame(rad1_data[2], index=rad1_data[0], columns=rad1_data[1])
-    df_rad2_data = pd.DataFrame(rad2_data[2], index=rad2_data[0], columns=rad2_data[1])
-
-    return [df_rad1_data, df_rad2_data]
+    return data
 
 
-def plot_wind_waves(data, t_lims=None, cmap='jet'):
+def plot_wind_waves(rad1_data, rad2_data, t_lims=None, cmap='jet'):
     """
     Plot Wind WAVES data (both RAD1 and RAD2).
     """
-    rad1_data = data[0]
-    rad2_data = data[1]
+
 
     ###############################################################################
     # 1) Read both RAD2 (top) and RAD1 (bottom)
@@ -255,9 +236,11 @@ def plot_wind_waves(data, t_lims=None, cmap='jet'):
 
     plt.show()
 
-startdate = "2024/06/17"
-enddate   = "2024/06/18"
+if __name__ == "__main__":
+    startdate = "2024/06/17"
+    enddate   = "2024/06/18"
 
-data = read_wind_waves_cdf(startdate=startdate, enddate=enddate)
+    rad1_data = load_waves_rad(dataset = "RAD1", startdate=startdate, enddate=enddate)
+    rad2_data = load_waves_rad(dataset = "RAD2", startdate=startdate, enddate=enddate)
 
-plot_wind_waves(data)
+    plot_wind_waves(rad1_data, rad2_data)
