@@ -9,3 +9,6 @@ soler/*.cdf
 __pycache__
 test.*
 *.cdf
+soler/test2.ipynb
+pyonset_minimal_demo.ipynb
+pyonset_minimal_demo copy.ipynb
