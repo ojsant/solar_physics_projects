@@ -34,8 +34,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib import cm
 
-from soler.tools.my_func_py3 import mag_angles, polarity_rtn, resample_df
-from soler.tools.polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
+from tools.my_func_py3 import mag_angles, polarity_rtn, resample_df
+from tools.polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
 
 from seppy.loader.wind import wind3dp_load
 from seppy.loader.soho import soho_load
@@ -316,6 +316,10 @@ def load_data(opt):
     return data
 
 def make_plot(data, opt):
+
+    FONT_YLABEL = 20
+    FONT_LEGEND = 10
+
     panels = 1*opt["plot_radio"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 1*opt["plot_pad"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] + 1* opt["plot_Vsw"] + 1* opt["plot_N"] + 1* opt["plot_T"]
 
     panel_ratios = list(np.zeros(panels)+1)
@@ -327,11 +331,7 @@ def make_plot(data, opt):
     if opt["plot_electrons"] or opt["plot_protons"]:    
         panel_ratios[0+1*opt["plot_radio"]] = 2
 
-
     
-    # PLOT
-    ####################################################################
-    i=0
     if panels == 3:
         fig, axs = plt.subplots(nrows=panels, sharex=True, figsize=[12, 4*panels])#, gridspec_kw={'height_ratios': panel_ratios})# layout="constrained")
     else:
@@ -344,9 +344,9 @@ def make_plot(data, opt):
     if panels == 1:
         axs = [axs, axs]
 
-    FONT_YLABEL = 20
-    FONT_LEGEND = 10
-    COLOR_OFFSET = 3
+    
+    color_offset = 3
+    i = 0
 
     if opt["plot_radio"]:
         vmin, vmax = 1e-15, 1e-10
@@ -372,7 +372,7 @@ def make_plot(data, opt):
     if opt["plot_electrons"]:
         # electrons
         ax = axs[i]
-        axs[i].set_prop_cycle('color', plt.cm.Greens_r(np.linspace(0,1, len(data["meta_e"]['channels_dict_df'])+COLOR_OFFSET)))
+        axs[i].set_prop_cycle('color', plt.cm.Greens_r(np.linspace(0,1, len(data["meta_e"]['channels_dict_df'])+color_offset)))
         if opt["wind"]:
             for ch in np.arange(1, len(data["meta_e"]['channels_dict_df'])):
                 ax.plot(data["edic"].index, data["edic"][f'FLUX_{ch}'] * opt["wind_ev2MeV_fac"], label='Wind/3DP '+data["meta_e"]['channels_dict_df']['Bins_Text'].values[ch], drawstyle='steps-mid')
@@ -386,11 +386,11 @@ def make_plot(data, opt):
         ax.set_ylabel(intensity_label, fontsize=FONT_YLABEL)
         i += 1
         
-    COLOR_OFFSET = 2    
+    color_offset = 2    
     if opt["plot_protons"]:    
         # protons low en:
         ax = axs[i]
-        ax.set_prop_cycle('color', plt.cm.plasma(np.linspace(0,1, len(data["meta_p"]['channels_dict_df'])+COLOR_OFFSET)))
+        ax.set_prop_cycle('color', plt.cm.plasma(np.linspace(0,1, len(data["meta_p"]['channels_dict_df'])+color_offset)))
         if opt["wind"]:
             for ch in np.arange(2, len(data["meta_p"]['channels_dict_df'])):
                 ax.plot(data["pdic"].index, data["pdic"][f'FLUX_{ch}'] * opt["wind_ev2MeV_fac"], label='Wind/3DP '+data["meta_p"]['channels_dict_df']['Bins_Text'].values[ch],
@@ -490,8 +490,8 @@ def make_plot(data, opt):
     axs[-1].xaxis.set_tick_params(rotation=0)
     axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["startdate"].year}", fontsize=15)
     axs[-1].set_xlim(opt["startdate"], opt["enddate"])
-
-
+    fig.patch.set_facecolor('white')
+    fig.set_dpi(200)
     plt.show()
     # if opt["save_fig"]:
     #     plt.savefig(f'{outpath}L1_multiplot_{str(opt["startdate"].date())}--{str(opt["enddate"].date())}_{opt["av_sep"]}.png')

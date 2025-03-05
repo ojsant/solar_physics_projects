@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import warnings
 import math
+import cdflib
 
 from matplotlib import pyplot as plt
 plt.rcParams['axes.linewidth'] = 1.5
@@ -32,10 +33,10 @@ from sunpy.coordinates import frames
 import ipywidgets as w
 from IPython.core.display import display
 
-from soler.tools.my_func_py3 import mag_angles
-from soler.tools.polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
-import soler.tools.cdaweb as cdaweb
-import cdflib
+from tools.my_func_py3 import mag_angles
+from tools.polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
+import tools.cdaweb as cdaweb
+
 
 # omit Pandas' PerformanceWarning
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
@@ -185,8 +186,10 @@ def load_data(opt):
     return data
 
 def make_plot(data, opt):
-    font_ylabel = 20
-    font_legend = 10
+    FONT_YLABEL = 20
+    FONT_LEGEND = 10
+    
+
 
     panels = 1*opt["plot_radio"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 1*opt["plot_pad"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] + 1* opt["plot_Vsw"] + 1* opt["plot_N"] + 1* opt["plot_T"]
 
@@ -207,8 +210,8 @@ def make_plot(data, opt):
 
     i = 0
 
-    color_offset = 4
 
+    color_offset = 4
     if opt["plot_radio"]:
         vmin, vmax = 500, 1e7
         log_norm = LogNorm(vmin=vmin, vmax=vmax)
@@ -222,12 +225,12 @@ def make_plot(data, opt):
         axs[i].pcolormesh(TimeHFR2D, FreqHFR2D, data["df_waves_hfr"].iloc[:-1,:-1], shading='flat', cmap='jet', norm=log_norm) # TODO: check if on top
 
         axs[i].set_yscale('log')
-        axs[i].set_ylabel("Frequency (MHz)", fontsize=font_ylabel)
+        axs[i].set_ylabel("Frequency (MHz)", fontsize=FONT_YLABEL)
         
         # Add inset axes for colorbar
         axins = inset_axes(axs[i], width="100%", height="100%", loc="center", bbox_to_anchor=(1.05,0,0.03,1), bbox_transform=axs[i].transAxes, borderpad=0.2)
         cbar = fig.colorbar(mesh, cax=axins, orientation="vertical")
-        cbar.set_label("Intensity (sfu)", rotation=90, labelpad=10, fontsize=font_ylabel)
+        cbar.set_label("Intensity (sfu)", rotation=90, labelpad=10, fontsize=FONT_YLABEL)
         i += 1
 
     if opt["plot_electrons"]:
@@ -244,13 +247,13 @@ def make_plot(data, opt):
                             label='HET '+data["meta_het"]['channels_dict_df_e'].ch_strings[channel],
                         ds="steps-mid")
         
-        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=font_ylabel)
+        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=FONT_YLABEL)
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right', borderaxespad=0., 
-                    title=f'Electrons (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=font_legend)
+                    title=f'Electrons (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=FONT_LEGEND)
         else:
             axs[i].legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., 
-                    title=f'Electrons (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=font_legend)
+                    title=f'Electrons (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=FONT_LEGEND)
         axs[i].set_yscale('log')
         i +=1    
 
@@ -272,13 +275,13 @@ def make_plot(data, opt):
                 axs[i].plot(data["df_het"].index, data["df_het"][f'Proton_Flux_{channel}'], 
                         label='HET '+data["meta_het"]['channels_dict_df_p'].ch_strings[channel], ds="steps-mid")
         
-        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=font_ylabel)
+        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=FONT_YLABEL)
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right', borderaxespad=0., 
-                    title=f'Ions (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=font_legend)
+                    title=f'Ions (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=FONT_LEGEND)
         else:
             axs[i].legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., 
-                    title=f'Ions (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=font_legend)
+                    title=f'Ions (SEPT: {opt["sept_viewing"]}, HET: sun)', fontsize=FONT_LEGEND)
         axs[i].set_yscale('log')
         i +=1    
         
@@ -300,7 +303,7 @@ def make_plot(data, opt):
         else:
             ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
             
-        ax.set_ylabel('B [nT]', fontsize=font_ylabel)
+        ax.set_ylabel('B [nT]', fontsize=FONT_YLABEL)
         ax.tick_params(axis="x", direction="in", which='both')#, pad=-15)
         i += 1
         
@@ -333,7 +336,7 @@ def make_plot(data, opt):
         ax.plot(data["df_mag"].index, alpha, '.k', label='alpha', ms=1)
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
         ax.set_ylim(-90, 90)
-        ax.set_ylabel(r"$\Theta_\mathrm{B}$ [°]", fontsize=font_ylabel)
+        ax.set_ylabel(r"$\Theta_\mathrm{B}$ [°]", fontsize=FONT_YLABEL)
         # ax.set_xlim(X1, X2)
         ax.tick_params(axis="x",direction="in", pad=-15)
 
@@ -342,7 +345,7 @@ def make_plot(data, opt):
         ax.plot(data["df_mag"].index, phi, '.k', label='phi', ms=1)
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
         ax.set_ylim(-180, 180)
-        ax.set_ylabel(r"$\Phi_\mathrm{B}$ [°]", fontsize=font_ylabel)
+        ax.set_ylabel(r"$\Phi_\mathrm{B}$ [°]", fontsize=FONT_YLABEL)
         # ax.set_xlim(X1, X2)
         ax.tick_params(axis="x",direction="in", which='both', pad=-15)
         i += 1
@@ -350,7 +353,7 @@ def make_plot(data, opt):
     ### Temperature
     if opt["plot_T"]:
         axs[i].plot(data["df_magplas"].index, data["df_magplas"]['Tp'], '-k', label="Temperature")
-        axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=font_ylabel)
+        axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=FONT_YLABEL)
         axs[i].set_yscale('log')
         i += 1
 
@@ -358,14 +361,14 @@ def make_plot(data, opt):
     if opt["plot_N"]:
         axs[i].plot(data["df_magplas"].index, data["df_magplas"].Np,
                     '-k', label="Ion density")
-        axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=font_ylabel)
+        axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=FONT_YLABEL)
         i += 1
 
     ### Sws
     if opt["plot_Vsw"]:
         axs[i].plot(data["df_magplas"].index, data["df_magplas"].Vp,
                     '-k', label="Bulk speed")
-        axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=font_ylabel)
+        axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=FONT_YLABEL)
         #i += 1
         
             
