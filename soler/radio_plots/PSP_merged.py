@@ -9,7 +9,7 @@ from sunpy.time import TimeRange
 from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 
 import cdflib
-import cdaweb
+import soler.tools.cdaweb as cdaweb
 
 
 

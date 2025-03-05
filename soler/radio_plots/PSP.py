@@ -9,7 +9,7 @@ from seppy.tools import resample_df
 from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 
 import cdflib
-import cdaweb
+import soler.tools.cdaweb as cdaweb
 
 
 

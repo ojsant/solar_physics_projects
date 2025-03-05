@@ -19,8 +19,8 @@ from seppy.tools import resample_df
 from stixdcpy.quicklook import LightCurves # https://github.com/i4Ds/stixdcpy
 from sunpy.coordinates import frames, get_horizons_coord
 
-from my_func_py3 import mag_angles
-from polarity_plotting import polarity_rtn
+from soler.tools.my_func_py3 import mag_angles
+from soler.tools.polarity_plotting import polarity_rtn
 
 # disable unused speasy data provider before importing to speed it up
 os.environ['SPEASY_CORE_DISABLED_PROVIDERS'] = "sscweb,archive,csa"
@@ -42,11 +42,11 @@ plt.rcParams['agg.path.chunksize'] = 20000
 import ipywidgets as w
 import seppy.tools.widgets as seppyw
 
-def selection():
-    options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
-    boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
-    for option in options:
-        display(boxes[option])
+# def selection():
+#     options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
+#     boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
+#     for option in options:
+#         display(boxes[option])
     
     
 
@@ -145,14 +145,117 @@ def load_data(opt):
                                     opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         
         data["psp_mag"] = pd.concat([df_psp_mag_rtn, df_psp_mag_phi, df_psp_mag_theta, df_psp_mag_tot], axis=1)
-        data["psp_mag"]['phi_mod'] = ((data["psp_mag"]['phi'].values - 180) % 360) - 180 
+        data["psp_mag"]['phi_mod'] = ((data["psp_mag"]['phi'].values - 180) % 360) - 180
 
     if opt["plot_mag_angles"]:
         theta, phi = mag_angles(data["psp_mag"]['|b|'].values, data["psp_mag"]['br'].values, data["psp_mag"]['bt'].values, data["psp_mag"]['bn'].values)
         data["psp_mag"]['theta2'] = theta
         data["psp_mag"]['phi2'] = phi
 
+    if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
+        # SPC
+        df_psp_spc_np_tot = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_np_tot, 
+                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+        df_psp_spc_vp_tot_nrm = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot_nrm, 
+                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+        df_psp_spc_vp_tot_rtn = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot, 
+                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+        df_psp_spc_wp_tot = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_wp_tot, 
+                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+        df_psp_spc_GF = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_flag.psp_spc_gf, 
+                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+        df_psp_spc = pd.concat([df_psp_spc_np_tot, df_psp_spc_vp_tot_nrm, df_psp_spc_vp_tot_rtn, df_psp_spc_wp_tot, df_psp_spc_GF], axis=1)
 
+        # SPAN-i
+        df_psp_spani_np = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.DENS, 
+                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+        df_psp_spani_vp_rtn_sun = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.VEL_RTN_SUN, 
+                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+        df_psp_spani_T = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.TEMP, 
+                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+        df_psp_spani_QF = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.QUALITY_FLAG, 
+                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+        df_psp_spani = pd.concat([df_psp_spani_np, df_psp_spani_vp_rtn_sun, df_psp_spani_T, df_psp_spani_QF], axis=1)
+
+        # Read units into dictionary
+
+        df_psp_spc_units = {}
+        df_psp_spc_units['np_tot'] = u.Unit(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_np_tot.units)
+        df_psp_spc_units['|vp_tot|'] = u.Unit(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot_nrm.units)
+        for k in ['vp_totr', 'vp_tott', 'vp_totn']:
+            df_psp_spc_units[k] = u.Unit(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot.units)
+        df_psp_spc_units['wp_tot'] = u.Unit(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_wp_tot.units)
+
+        df_psp_spani_units = {}
+        df_psp_spani_units['Density'] = u.Unit(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.DENS.UNITS)
+        for k in ['Vx RTN', 'Vy RTN', 'Vz RTN']:
+            df_psp_spani_units[k] = u.Unit(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.VEL_RTN_SUN.UNITS)
+        df_psp_spani_units['Temperature'] = u.Unit(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.TEMP.UNITS)
+
+        # Convert to AstroPy QTables
+
+        qt_psp_spc = QTable.from_pandas(df_psp_spc, index=True, units=df_psp_spc_units)
+        # qt_psp_spc = QTable(qt_psp_spc, masked=True)
+        qt_psp_spani = QTable.from_pandas(df_psp_spani, index=True, units=df_psp_spani_units)
+        qt_psp_spc['T'] = (1/2*m_p/k_B*(qt_psp_spc['wp_tot'])**2).si
+        qt_psp_spc['p_dyn'] = (m_p*qt_psp_spc['np_tot']*(qt_psp_spc['|vp_tot|'])**2).to(u.nPa)
+        qt_psp_spani['V_tot_rtn'] = np.sqrt(qt_psp_spani['Vx RTN']**2+qt_psp_spani['Vy RTN']**2+qt_psp_spani['Vz RTN']**2)
+        qt_psp_spani['T_K'] = (qt_psp_spani['Temperature']/k_B).si
+        qt_psp_spani['p_dyn'] = (m_p*qt_psp_spani['Density']*(qt_psp_spani['V_tot_rtn'])**2).to(u.nPa)
+
+        # Back to Pandas
+
+        df_psp_spc = qt_psp_spc.to_pandas(index='index')
+        df_psp_spc.index.name = None
+
+        df_psp_spani = qt_psp_spani.to_pandas(index='index')
+        df_psp_spani.index.name = None
+
+        # Data cleaning
+
+        df_psp_spc = df_psp_spc.mask(df_psp_spc['general_flag']!=0.0)
+        df_psp_spani['Temperature'] = df_psp_spani['Temperature'].mask(df_psp_spani['Temperature']<0.0)
+        df_psp_spani['T_K'] = df_psp_spani['T_K'].mask(df_psp_spani['T_K']<0.0)
+
+
+        #### Filter data based on Quality Flags
+        # The Quality flags mostly contain a description of the instrument activities and operational status. 
+        # For those, I would recommend avoiding anything with the following quality bits set to 1:
+
+        # - bit0 - counter overflow
+        # - bit3 - spoiler test
+        # - bit10 - bad energy table
+        # - bit11 - MCP test
+        # - bit14 - threshold test
+        # - bit15 - commanding
+
+        # (R. Livi, priv. comm.)
+
+        df_psp_spani['Quality Flag binary'] = df_psp_spani['Quality Flag'].astype(int).map('{:b}'.format).astype(str)
+        df_psp_spani['Quality Flag binary'] = df_psp_spani['Quality Flag binary'].str.zfill(16)
+
+        qf_bits_list = ['Counter Overflow', 'Survey Snapshot ON (not applicable to archive products)', 'Alternate Energy Table', 'Spoiler Test', 'Attenuator Engaged', 'Highest Archive Rate', 'No Targeted Sweep',
+                        'SPAN-Ion New Mass Table (not applicable to electrons)', 'Over-deflection', 'Archive Snapshot ON', 'Bad Energy Table', 'MCP Test', 'Survey Available', 'Archive Available', 
+                        'Threshold Test', 'Commanding']
+        qf_bits_list.reverse()
+
+        for i in range(len(qf_bits_list)):
+            df_psp_spani[qf_bits_list[i]] = df_psp_spani['Quality Flag binary'].str[i]
+            df_psp_spani[qf_bits_list[i]] = df_psp_spani[qf_bits_list[i]].astype(int)
+
+        cond1 = df_psp_spani['Counter Overflow']==1
+        cond2 = df_psp_spani['Spoiler Test']==1
+        cond3 = df_psp_spani['Bad Energy Table']==1
+        cond4 = df_psp_spani['MCP Test']==1
+        cond5 = df_psp_spani['Threshold Test']==1
+        cond6 = df_psp_spani['Commanding']==1
+
+        df_psp_spani = df_psp_spani.mask(cond1 | cond2 | cond3 | cond4 | cond5 | cond6)
+
+        # Drop binary version of Quality Flag because otherwise resampling will crash later
+        df_psp_spani.drop(columns='Quality Flag binary', inplace=True)
+
+    
 
     #################################################################
     ############## Resampling #######################################
@@ -167,9 +270,9 @@ def load_data(opt):
             data["psp_epilo_ic"] = resample_df(data["psp_epilo_ic_org"], opt["resample"]) 
         # if plot_psp_pixel:
         #     df_psp_pixel = resample_df(df_psp_pixel_org, resample) 
-        if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"]:
-            df_magplas_spani = resample_df(df_psp_spani, opt["resample_mag"]) 
-            df_magplas_spc = resample_df(df_psp_spc, opt["resample_mag"])
+        if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
+            data["df_magplas_spani"] = resample_df(df_psp_spani, opt["resample_mag"]) 
+            data["df_magplas_spc"] = resample_df(df_psp_spc, opt["resample_mag"])
         if opt["plot_mag"]:
             data["mag"] = resample_df(data["psp_mag"], opt["resample_mag"]) 
         if opt["plot_stix"]:
@@ -185,17 +288,14 @@ def load_data(opt):
                 data["psp_epilo_ic"] = data["psp_epilo_ic_org"]
             # if plot_psp_pixel:
             #     df_psp_pixel = df_psp_pixel_org
-            if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"]:
-                df_magplas_spani = df_psp_spani 
-                df_magplas_spc = df_psp_spc
+            if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
+                data["df_magplas_spani"] = df_psp_spani 
+                data["df_magplas_spc"] = df_psp_spc
             if opt["plot_mag"]:
                 data["mag"] = data["psp_mag"]
             if opt["plot_stix"]:
                 data["stix"] = data["stix_orig"]
     
-                
-
-
 
     ############################################################################
     ############## Energy channel ranges #######################################
@@ -227,7 +327,7 @@ def make_plot(data, opt):
     Plot chosen data with user-specified parameters.
     """
 
-    panels = 1*opt["plot_radio"] + 1*opt["plot_stix"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] #+ 1*plot_Vsw + 1*plot_N + 1*plot_T + 1*plot_p_dyn 
+    panels = 1*opt["plot_radio"] + 1*opt["plot_stix"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] + 1*opt["plot_Vsw"] + 1*opt["plot_N"] + 1*opt["plot_T"] + 1*opt["plot_p_dyn"] 
 
     panel_ratios = list(np.zeros(panels)+1)
 
@@ -433,13 +533,13 @@ def make_plot(data, opt):
         
     ### Temperature
     if opt["plot_T"]:
-        axs[i].plot(df_magplas_spani.index, df_magplas_spani['T_K'], '-k', label="SPAN-i")
-        axs[i].plot(df_magplas_spc.index, df_magplas_spc['T'], '-r', label="SPC")
+        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['T_K'], '-k', label="SPAN-i")
+        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['T'], '-r', label="SPC")
         axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=FONT_YLABEL)
         axs[i].set_yscale('log')
     
         # TODO: manually set lower boundary, remove at some point
-        axs[i].set_ylim(np.nanmin(df_magplas_spc['T'])-0.1*np.nanmin(df_magplas_spc['T']), None)
+        axs[i].set_ylim(np.nanmin(data["df_magplas_spc"]['T'])-0.1*np.nanmin(data["df_magplas_spc"]['T']), None)
     
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right')
@@ -449,8 +549,8 @@ def make_plot(data, opt):
     
     ### Dynamic pressure
     if opt["plot_p_dyn"]:
-        axs[i].plot(df_magplas_spani.index, df_magplas_spani['p_dyn'], '-k', label="SPAN-i")
-        axs[i].plot(df_magplas_spc.index, df_magplas_spc['p_dyn'], '-r', label="SPC")
+        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['p_dyn'], '-k', label="SPAN-i")
+        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['p_dyn'], '-r', label="SPC")
         axs[i].set_ylabel(r"P$_\mathrm{dyn}$ [nPa]", fontsize=FONT_YLABEL)
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right')
@@ -461,8 +561,8 @@ def make_plot(data, opt):
     
     ### Density
     if opt["plot_N"]:
-        axs[i].plot(df_magplas_spani.index, df_magplas_spani['Density'], '-k', label="SPAN-i")
-        axs[i].plot(df_magplas_spc.index, df_magplas_spc['np_tot'], '-r', label="SPC")
+        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['Density'], '-k', label="SPAN-i")
+        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['np_tot'], '-r', label="SPC")
         axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=FONT_YLABEL)
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right')
@@ -473,8 +573,8 @@ def make_plot(data, opt):
     
     ### Vsw
     if opt["plot_Vsw"]:
-        axs[i].plot(df_magplas_spani.index, df_magplas_spani['V_tot_rtn'], '-k', label="SPAN-i")
-        axs[i].plot(df_magplas_spc.index, df_magplas_spc['|vp_tot|'], '-r', label="SPC")
+        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['V_tot_rtn'], '-k', label="SPAN-i")
+        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['|vp_tot|'], '-r', label="SPC")
         axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=FONT_YLABEL)
         if opt["legends_inside"]:
             axs[i].legend(loc='upper right')

@@ -9,7 +9,7 @@ from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 import cdflib
 import os
 import sunpy
-import cdaweb
+import soler.tools.cdaweb as cdaweb
 
 def load_swaves(dataset, startdate, enddate, path=None):
     """
