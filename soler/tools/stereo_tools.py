@@ -96,7 +96,7 @@ def load_swaves(dataset, startdate, enddate, path=None):
 # GUI menu
 class StereoSelect:
     def __init__(self):
-        self._options = ["Radio", "Electrons", "Protons", "Pad?", "Mag angles", "Mag", "V_sw", "N", "T", "Polarity", "HET"]
+        self._options = ["Radio", "Electrons", "Protons", "PAD", "Mag angles", "Mag", "V_sw", "N", "T", "Polarity", "HET"]
         self._checkboxes = dict(zip(self._options, [w.Checkbox(value=False, description=quant, indent=False) for quant in self._options]))
 
         self.startdate = w.DatePicker(value=dt.date.today() - dt.timedelta(days=1), disabled=False)
@@ -105,7 +105,7 @@ class StereoSelect:
         self.plot_radio = self._checkboxes["Radio"].value
         self.plot_electrons = self._checkboxes["Electrons"].value
         self.plot_protons = self._checkboxes["Protons"].value
-        self.plot_pad = self._checkboxes["Pad?"].value
+        self.plot_pad = self._checkboxes["PAD"].value
         self.plot_mag_angles = self._checkboxes["Mag angles"].value
         self.plot_V_sw = self._checkboxes["V_sw"].value
         self.plot_N = self._checkboxes["N"].value
@@ -135,7 +135,7 @@ def load_data(opt):
                         path=opt["file_path"], pos_timestamp=opt["pos_timestamp"], spacecraft=opt["sc"])
 
     if opt["plot_mag"]:
-        data["df_mag_orig"], data["meta"] = stereo_load(spacecraft=opt["sc"], instrument='MAG', startdate=opt["startdate"], enddate=opt["enddate"], mag_coord=opt["mag_coord"], 
+        data["df_mag_orig"], data["meta"] = stereo_load(spacecraft=opt["sc"], instrument='MAG', startdate=opt["startdate"], enddate=opt["enddate"], mag_coord='RTN', 
                                         path=opt["file_path"])
 
     if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"]:
