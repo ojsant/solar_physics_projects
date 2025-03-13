@@ -1,13 +1,8 @@
-# from IPython.core.display import display, HTML
-# display(HTML(data="""<style> div#notebook-container { width: 80%; } div#menubar-container { width: 85%; } div#maintoolbar-container { width: 90%; } </style>"""))
 import numpy as np
-import os
 import pandas as pd
 import datetime as dt
 import warnings
-import math
 import cdflib
-import sys
 import sunpy
 
 from matplotlib import pyplot as plt
@@ -72,9 +67,9 @@ class Options:
         self.radio_cmap = w.Dropdown(options=['jet', 'magma', 'Spectral'], value='jet', description='Radio colormap')
         self.pos_timestamp = w.Dropdown(options=['center', 'start', 'original'], description='Timestamp position')
 
-        self.ch_sept_e = w.SelectMultiple(options=range(0,14+1), description='SEPT electron energies:', rows=10, style=multiselect_style)
-        self.ch_sept_p = w.SelectMultiple(options=range(0,29+1), description='SEPT proton energies:', rows=10, style=multiselect_style)
-        self.ch_het_p =  w.SelectMultiple(options=range(0,10+1), description='HET proton energies:', rows=10, style=multiselect_style)
+        self.ch_sept_e = w.SelectMultiple(options=range(0,14+1), description='SEPT electron channels:', rows=10, style=multiselect_style)
+        self.ch_sept_p = w.SelectMultiple(options=range(0,29+1), description='SEPT proton channels:', rows=10, style=multiselect_style)
+        self.ch_het_p =  w.SelectMultiple(options=range(0,10+1), description='HET proton channels:', rows=10, style=multiselect_style)
         
         self.resample = w.BoundedIntText(value=15, min=0, max=30, step=1, description='Resampling (min):', disabled=False)
         self.resample_mag = w.BoundedIntText(value=5, min=0, max=30, step=1, description='MAG resampling (min):', disabled=False)
@@ -133,7 +128,7 @@ class Options:
         self.ch_sept_p.value = (1, 2, 3, 7, 8, 9, 10, 11, 19, 20, 21)
         self.ch_sept_e.value = (3, 4, 5, 6, 7, 8, 12, 13, 14)
 
-        
+options = Options()
 
 def plot_range_interval(startdate, enddate):
     timestamps = []
@@ -264,111 +259,69 @@ def load_data():
     global meta_se
     global meta_sp
     global meta_het
-    
-    global startdate
-    global enddate
-    global sept_viewing
-    global sc
-    global plot_radio
-    global plot_mag
-    global plot_mag_angles
-    global plot_Vsw
-    global plot_N
-    global plot_T
-    global plot_het
-    global plot_polarity
-    global pos_timestamp
-    global path
-
-    # TODO: these act weird
-    startdate = options.startdate.value
-    enddate = options.enddate.value
-    sept_viewing = options.sept_viewing.value
-    sc = options.sc.value
-    plot_radio = options.radio.value
-    plot_mag = options.mag.value
-    plot_mag_angles = options.mag_angles.value
-    plot_Vsw = options.Vsw.value
-    plot_N = options.N.value
-    plot_T = options.T.value
-    plot_het = options.het.value
-    plot_polarity = options.polarity.value
-    pos_timestamp = options.pos_timestamp.value
-    path = options.path
 
     resample = str(options.resample.value) + "min"         # convert to form that Pandas accepts
     resample_mag = str(options.resample_mag.value) + "min"
     resample_pol = str(options.resample_pol.value) + "min"
 
-    df_sept_electrons_orig, meta_se = stereo_load(instrument='SEPT', startdate=startdate, enddate=enddate, 
-                        sept_species='e', sept_viewing=sept_viewing,
-                        path=path, pos_timestamp=pos_timestamp, spacecraft=sc)
-    df_sept_protons_orig, meta_sp = stereo_load(instrument='SEPT', startdate=startdate, enddate=enddate, 
-                            sept_species='p', sept_viewing=sept_viewing,
-                            path=path, pos_timestamp=pos_timestamp, spacecraft=sc)
+    df_sept_electrons_orig, meta_se = stereo_load(instrument='SEPT', startdate=options.startdate.value, enddate=options.enddate.value, 
+                        sept_species='e', sept_viewing=options.sept_viewing.value,
+                        path=options.path, pos_timestamp=options.pos_timestamp.value, spacecraft=options.sc.value)
+    df_sept_protons_orig, meta_sp = stereo_load(instrument='SEPT', startdate=options.startdate.value, enddate=options.enddate.value, 
+                            sept_species='p', sept_viewing=options.sept_viewing.value,
+                            path=options.path, pos_timestamp=options.pos_timestamp.value, spacecraft=options.sc.value)
     
-    if plot_het:
-        df_het_orig, meta_het = stereo_load(instrument='HET', startdate=startdate, enddate=enddate,
-                        path=path, pos_timestamp=pos_timestamp, spacecraft=sc)
+    if options.het.value:
+        df_het_orig, meta_het = stereo_load(instrument='HET', startdate=options.startdate.value, enddate=options.enddate.value,
+                        path=options.path, pos_timestamp=options.pos_timestamp.value, spacecraft=options.sc.value)
 
-    if plot_mag or plot_mag_angles:
-        df_mag_orig, meta_mag = stereo_load(spacecraft=sc, instrument='MAG', startdate=startdate, enddate=enddate, mag_coord='RTN', 
-                                        path=path)
+    if options.mag.value or options.mag_angles.value:
+        df_mag_orig, meta_mag = stereo_load(spacecraft=options.sc.value, instrument='MAG', startdate=options.startdate.value, enddate=options.enddate.value, mag_coord='RTN', 
+                                        path=options.path)
 
-    if plot_Vsw or plot_N or plot_T or plot_polarity:
-        df_magplasma, meta_magplas = stereo_load(instrument='MAGPLASMA', startdate=startdate, enddate=enddate, 
-                            path=path, pos_timestamp=pos_timestamp, spacecraft=sc)
+    if options.Vsw.value or options.N.value or options.T.value or options.polarity.value:
+        df_magplasma, meta_magplas = stereo_load(instrument='MAGPLASMA', startdate=options.startdate.value, enddate=options.enddate.value, 
+                            path=options.path, pos_timestamp=options.pos_timestamp.value, spacecraft=options.sc.value)
       
 
-    if plot_radio:
-        df_waves_hfr = load_swaves("STA_L3_WAV_HFR", startdate=startdate, enddate=enddate, path=path)
-        df_waves_lfr = load_swaves("STA_L3_WAV_LFR", startdate=startdate, enddate=enddate, path=path)
+    if options.radio.value:
+        df_waves_hfr = load_swaves("STA_L3_WAV_HFR", startdate=options.startdate.value, enddate=options.enddate.value, path=options.path)
+        df_waves_lfr = load_swaves("STA_L3_WAV_LFR", startdate=options.startdate.value, enddate=options.enddate.value, path=options.path)
 
     if resample is not None:
         df_sept_electrons = resample_df(df_sept_electrons_orig, resample)  
         df_sept_protons = resample_df(df_sept_protons_orig, resample)  
-        if plot_het:
+        if options.het.value:
             df_het  = resample_df(df_het_orig, resample)  
-        if plot_Vsw or plot_N or plot_T:
+        if options.Vsw.value or options.N.value or options.T.value:
             df_magplas = resample_df(df_magplasma, resample_mag) 
-        if plot_mag or plot_mag_angles:
+        if options.mag.value or options.mag_angles.value:
             df_mag = resample_df(df_mag_orig, resample_mag)
-            if plot_polarity:
+            if options.polarity.value:
                 df_magplas_pol = resample_df(df_magplasma, resample_pol)
     
     else:
         df_sept_electrons = df_sept_electrons_orig
         df_sept_protons = df_sept_protons_orig  
-        if plot_het:
+        if options.het.value:
             df_het  = df_het_orig
-        if plot_Vsw or plot_N or plot_T:
+        if options.Vsw.value or options.N.value or options.T.value:
             df_magplas = df_magplasma
-        if plot_mag or plot_mag_angles:
+        if options.mag.value or options.mag_angles.value:
             df_mag = df_mag_orig
-            if plot_polarity:
+            if options.polarity.value:
                 df_magplas_pol = df_magplasma
 
 
 
 def make_plot():
+
     font_ylabel = 20
     font_legend = 10
     
-    plot_electrons = options.electrons.value
-    plot_protons = options.protons.value
-    plot_mag_angles = options.mag_angles.value
-    
-    ch_sept_e = options.ch_sept_e.value
-    ch_sept_p = options.ch_sept_p.value
-    ch_het_p = options.ch_het_p.value
     ch_het_e = range(0,2+1,1)
 
-    legends_inside = options.legends_inside.value
-
-    t_start = options.plot_range.children[0].value[0]
-    t_end = options.plot_range.children[0].value[1]
-
-    print(f"Chosen plot range:\n{t_start} - {t_end}")
+    print(f"Chosen plot range:\n{options.plot_range.children[0].value[0]} - {options.plot_range.children[0].value[1]}")
 
     # #Channels list
     # channels_n_sept_e = range(0,14+1,n_sept_e)  # changed from np.arange()
@@ -380,22 +333,22 @@ def make_plot():
 
     #Chosen channels
     print('Chosen channels:')
-    print(f'SEPT electrons: {ch_sept_e}, {len(ch_sept_e)}')
+    print(f'SEPT electrons: {options.ch_sept_e.value}, {len(options.ch_sept_e.value)}')
     print(f'HET electrons: {ch_het_e}, {len(ch_het_e)}')
-    print(f'SEPT protons: {ch_sept_p}, {len(ch_sept_p)}')
-    print(f'HET protons: {ch_het_p}, {len(ch_het_p)}')
+    print(f'SEPT protons: {options.ch_sept_p.value}, {len(options.ch_sept_p.value)}')
+    print(f'HET protons: {options.ch_het_p.value}, {len(options.ch_het_p.value)}')
 
-    panels = 1*plot_radio + 1*plot_electrons + 1*plot_protons  + 2*plot_mag_angles + 1*plot_mag + 1* plot_Vsw + 1* plot_N + 1* plot_T # + 1*plot_pad
+    panels = 1*options.radio.value + 1*options.electrons.value + 1*options.protons.value  + 2*options.mag_angles.value + 1*options.mag.value + 1* options.Vsw.value + 1* options.N.value + 1* options.T.value # + 1*plot_pad
 
     panel_ratios = list(np.zeros(panels)+1)
 
-    if plot_radio:
+    if options.radio.value:
         panel_ratios[0] = 2
-    if plot_electrons and plot_protons:
-        panel_ratios[0+1*plot_radio] = 2
-        panel_ratios[1+1*plot_radio] = 2
-    if plot_electrons or plot_protons:    
-        panel_ratios[0+1*plot_radio] = 2
+    if options.electrons.value and options.protons.value:
+        panel_ratios[0+1*options.radio.value] = 2
+        panel_ratios[1+1*options.radio.value] = 2
+    if options.electrons.value or options.protons.value:    
+        panel_ratios[0+1*options.radio.value] = 2
 
     if panels == 3:
         fig, axs = plt.subplots(nrows=panels, sharex=True, figsize=[12, 4*panels])#, gridspec_kw={'height_ratios': panel_ratios})# layout="constrained")
@@ -407,7 +360,7 @@ def make_plot():
 
 
     color_offset = 4
-    if plot_radio:
+    if options.radio.value:
         vmin, vmax = 500, 1e7
         log_norm = LogNorm(vmin=vmin, vmax=vmax)
         
@@ -428,13 +381,13 @@ def make_plot():
         cbar.set_label("Intensity (sfu)", rotation=90, labelpad=10, fontsize=font_ylabel)
         i += 1
 
-    if plot_electrons:
+    if options.electrons.value:
         # plot sept electron channels
-        axs[i].set_prop_cycle('color', plt.cm.Reds_r(np.linspace(0,1,len(ch_sept_e)+color_offset)))
-        for channel in ch_sept_e:
+        axs[i].set_prop_cycle('color', plt.cm.Reds_r(np.linspace(0,1,len(options.ch_sept_e.value)+color_offset)))
+        for channel in options.ch_sept_e.value:
             axs[i].plot(df_sept_electrons.index, df_sept_electrons[f'ch_{channel+2}'],
                         ds="steps-mid", label='SEPT '+meta_se.ch_strings[channel+2])
-        if plot_het:
+        if options.het.value:
             # plot het electron channels
             axs[i].set_prop_cycle('color', plt.cm.PuRd_r(np.linspace(0,1,4+color_offset)))
             for channel in ch_het_e:
@@ -443,52 +396,52 @@ def make_plot():
                         ds="steps-mid")
         
         axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=font_ylabel)
-        if legends_inside:
+        if options.legends_inside.value:
             axs[i].legend(loc='upper right', borderaxespad=0., 
-                    title=f'Electrons (SEPT: {sept_viewing}, HET: sun)', fontsize=font_legend)
+                    title=f'Electrons (SEPT: {options.sept_viewing.value}, HET: sun)', fontsize=font_legend)
         else:
             axs[i].legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., 
-                    title=f'Electrons (SEPT: {sept_viewing}, HET: sun)', fontsize=font_legend)
+                    title=f'Electrons (SEPT: {options.sept_viewing.value}, HET: sun)', fontsize=font_legend)
         axs[i].set_yscale('log')
         i +=1    
 
         
     color_offset = 2    
-    if plot_protons:
+    if options.protons.value:
         # plot sept proton channels
-        num_channels = len(ch_sept_p)# + len(n_het_p)
+        num_channels = len(options.ch_sept_p.value)# + len(n_het_p)
         axs[i].set_prop_cycle('color', plt.cm.plasma(np.linspace(0,1,num_channels+color_offset)))
-        for channel in ch_sept_p:
+        for channel in options.ch_sept_p.value:
             axs[i].plot(df_sept_protons.index, df_sept_protons[f'ch_{channel+2}'], 
                     label='SEPT '+meta_sp.ch_strings[channel+2], ds="steps-mid")
         
         color_offset = 0 
-        if plot_het:
+        if options.het.value:
             # plot het proton channels
-            axs[i].set_prop_cycle('color', plt.cm.YlOrRd(np.linspace(0.2,1,len(ch_het_p)+color_offset)))
-            for channel in ch_het_p:
+            axs[i].set_prop_cycle('color', plt.cm.YlOrRd(np.linspace(0.2,1,len(options.ch_het_p.value)+color_offset)))
+            for channel in options.ch_het_p.value:
                 axs[i].plot(df_het.index, df_het[f'Proton_Flux_{channel}'], 
                         label='HET '+meta_het['channels_dict_df_p'].ch_strings[channel], ds="steps-mid")
         
         axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=font_ylabel)
-        if legends_inside:
+        if options.legends_inside.value:
             axs[i].legend(loc='upper right', borderaxespad=0., 
-                    title=f'Ions (SEPT: {sept_viewing}, HET: sun)', fontsize=font_legend)
+                    title=f'Ions (SEPT: {options.sept_viewing.value}, HET: sun)', fontsize=font_legend)
         else:
             axs[i].legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., 
-                    title=f'Ions (SEPT: {sept_viewing}, HET: sun)', fontsize=font_legend)
+                    title=f'Ions (SEPT: {options.sept_viewing.value}, HET: sun)', fontsize=font_legend)
         axs[i].set_yscale('log')
         i +=1    
         
     # plot magnetic field
-    if plot_mag:
+    if options.mag.value:
         ax = axs[i]
         ax.plot(df_mag.index, df_mag.BFIELD_3, label='B', color='k', linewidth=1)
         ax.plot(df_mag.index.values, df_mag.BFIELD_0.values, label='Br', color='dodgerblue')
         ax.plot(df_mag.index.values, df_mag.BFIELD_1.values, label='Bt', color='limegreen')
         ax.plot(df_mag.index.values, df_mag.BFIELD_2.values, label='Bn', color='deeppink')
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
-        if legends_inside:
+        if options.legends_inside.value:
             ax.legend(loc='upper right')
         else:
             ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
@@ -497,8 +450,8 @@ def make_plot():
         ax.tick_params(axis="x", direction="in", which='both')#, pad=-15)
         
         
-        if plot_polarity:
-            pos = get_horizons_coord(f'STEREO-{sc}', time={'start':df_magplas_pol.index[0]-pd.Timedelta(minutes=15),'stop':df_magplas_pol.index[-1]+pd.Timedelta(minutes=15),'step':"1min"})  # (lon, lat, radius) in (deg, deg, AU)
+        if options.polarity.value:
+            pos = get_horizons_coord(f'STEREO-{options.sc.value}', time={'start':df_magplas_pol.index[0]-pd.Timedelta(minutes=15),'stop':df_magplas_pol.index[-1]+pd.Timedelta(minutes=15),'step':"1min"})  # (lon, lat, radius) in (deg, deg, AU)
             pos = pos.transform_to(frames.HeliographicStonyhurst())
             #Interpolate position data to magnetic field data cadence
             r = np.interp([t.timestamp() for t in df_magplas_pol.index],[t.timestamp() for t in pd.to_datetime(pos.obstime.value)],pos.radius.value)
@@ -516,11 +469,11 @@ def make_plot():
             mapper = cm.ScalarMappable(norm=norm, cmap=cm.bwr)
             pol_ax.bar(df_magplas_pol.index.values[(phi_relative>=0) & (phi_relative<180)],pol_arr[(phi_relative>=0) & (phi_relative<180)],color=mapper.to_rgba(phi_relative[(phi_relative>=0) & (phi_relative<180)]),width=timestamp)
             pol_ax.bar(df_magplas_pol.index.values[(phi_relative>=180) & (phi_relative<360)],pol_arr[(phi_relative>=180) & (phi_relative<360)],color=mapper.to_rgba(np.abs(360-phi_relative[(phi_relative>=180) & (phi_relative<360)])),width=timestamp)
-            pol_ax.set_xlim(t_start, t_end)
+            pol_ax.set_xlim(options.plot_range.children[0].value[0], options.plot_range.children[0].value[1])
 
         i += 1
         
-    if plot_mag_angles:
+    if options.mag_angles.value:
         ax = axs[i]
         #Bmag = np.sqrt(np.nansum((mag_data.B_r.values**2,mag_data.B_t.values**2,mag_data.B_n.values**2), axis=0))    
         alpha, phi = mag_angles(df_mag.BFIELD_3, df_mag.BFIELD_0.values, df_mag.BFIELD_1.values,
@@ -543,32 +496,32 @@ def make_plot():
         i += 1
         
     ### Temperature
-    if plot_T:
+    if options.T.value:
         axs[i].plot(df_magplas.index, df_magplas['Tp'], '-k', label="Temperature")
         axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=font_ylabel)
         axs[i].set_yscale('log')
         i += 1
 
     ### Density
-    if plot_N:
+    if options.N.value:
         axs[i].plot(df_magplas.index, df_magplas.Np,
                     '-k', label="Ion density")
         axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=font_ylabel)
         i += 1
 
     ### Sws
-    if plot_Vsw:
+    if options.Vsw.value:
         axs[i].plot(df_magplas.index, df_magplas.Vp,
                     '-k', label="Bulk speed")
         axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=font_ylabel)
         #i += 1
         
-    axs[0].set_title(f'STEREO {sc}', ha='center')
+    axs[0].set_title(f'STEREO {options.sc.value}', ha='center')
 
     axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%b %d'))
     axs[-1].xaxis.set_tick_params(rotation=0)
-    axs[-1].set_xlabel(f"Time (UTC) / Date in {t_start.year}", fontsize=15)
-    axs[-1].set_xlim(t_start, t_end)
+    axs[-1].set_xlabel(f"Time (UTC) / Date in {options.plot_range.children[0].value[0].year}", fontsize=15)
+    axs[-1].set_xlim(options.plot_range.children[0].value[0], options.plot_range.children[0].value[1])
 
     #plt.tight_layout()
     #fig.set_size_inches(12,15)
@@ -578,56 +531,4 @@ def make_plot():
 
     return fig, axs
 
-def update_options():
-    global startdate
-    global enddate
-    global sept_viewing
-    global sc
-    global plot_radio
-    global plot_mag
-    global plot_mag_angles
-    global plot_Vsw
-    global plot_N
-    global plot_T
-    global plot_het
-    global plot_polarity
-    global pos_timestamp
-    global path
-    global plot_electrons
-    global plot_protons
-    global ch_sept_e
-    global ch_sept_p
-    global ch_het_p
-    global ch_het_e
-    global legends_inside
-    global t_start
-    global t_end
 
-    startdate = options.startdate.value
-    enddate = options.enddate.value
-    sept_viewing = options.sept_viewing.value
-    sc = options.sc.value
-    plot_radio = options.radio.value
-    plot_mag = options.mag.value
-    plot_mag_angles = options.mag_angles.value
-    plot_Vsw = options.Vsw.value
-    plot_N = options.N.value
-    plot_T = options.T.value
-    plot_het = options.het.value
-    plot_polarity = options.polarity.value
-    pos_timestamp = options.pos_timestamp.value
-    path = options.path
-    plot_electrons = options.electrons.value
-    plot_protons = options.protons.value
-    plot_mag_angles = options.mag_angles.value
-    
-    ch_sept_e = options.ch_sept_e.value
-    ch_sept_p = options.ch_sept_p.value
-    ch_het_p = options.ch_het_p.value
-
-    legends_inside = options.legends_inside.value
-
-    t_start = options.plot_range.children[0].value[0]
-    t_end = options.plot_range.children[0].value[1]
-
-options = Options()
