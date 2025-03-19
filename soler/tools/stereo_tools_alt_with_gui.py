@@ -31,7 +31,6 @@ from sunpy.coordinates import get_horizons_coord
 from sunpy.coordinates import frames
 
 import ipywidgets as w
-from IPython.display import display
 
 from tools.my_func_py3 import mag_angles
 from tools.polarity_plotting import polarity_rtn, polarity_panel, polarity_colorwheel
@@ -44,156 +43,6 @@ warnings.filterwarnings(action='ignore', message='No units provided for variable
 warnings.filterwarnings(action='ignore', message='astropy did not recognize units of', category=sunpy.util.SunpyUserWarning, module='sunpy.io._cdf')
 
 
-class Options:
-    
-    def __init__(self):
-        style = {'description_width' : '50px'}
-        multiselect_style = {'description_width' : '66%'}
-        layout = w.Layout(width="20%")
-        
-        self.radio = w.Checkbox(value=True, description="Radio", indent=False)
-        self.electrons = w.Checkbox(value=True, description="Electrons", indent=False)
-        self.het = w.Checkbox(value=True, description="HET", indent=False)
-        self.protons = w.Checkbox(value=True, description="Protons", indent=False)
-        self.pad = w.Checkbox(value=False, description="PAD (not implemented)", disabled=True, indent=False)    # TODO: remove disabled keyword after implementation
-        self.mag = w.Checkbox(value=True, description="MAG", indent=False)
-        self.mag_angles = w.Checkbox(value=True, description="MAG angles", indent=False)
-        self.Vsw = w.Checkbox(value=True, description="V_sw", indent=False)
-        self.N = w.Checkbox(value=True, description="N", indent=False)
-        self.T = w.Checkbox(value=True, description="T", indent=False)
-        self.polarity = w.Checkbox(value=True, description="Polarity", indent=False)
-        self.legends_inside = w.Checkbox(value=False, description='Legends inside', indent=False)
-        
-        self.startdate = w.NaiveDatetimePicker(value=None, disabled=False, min=dt.datetime(2006, 10, 26), max=dt.datetime.now() - dt.timedelta(hours=1), description="Start date (data):", style=style)
-        self.enddate = w.NaiveDatetimePicker(value=None, disabled=False, min=dt.datetime(2006, 10, 26) + dt.timedelta(hours=1), max=dt.datetime.now(), description="End date (data):", style=style)
-
-        self.sept_viewing = w.Dropdown(options=['sun', 'asun', 'north', 'south'], value='sun', description='SEPT viewing:')
-        self.sc = w.Dropdown(options=['A', 'B'], value='A', description='Spacecraft (A or B):', style=style)
-        self.radio_cmap = w.Dropdown(options=['jet', 'magma', 'Spectral'], value='jet', description='Radio colormap')
-        self.pos_timestamp = w.Dropdown(options=['center', 'start', 'original'], description='Timestamp position')
-
-        self.ch_sept_e = w.SelectMultiple(options=range(0,14+1), description='SEPT electron energies:', rows=10, style=multiselect_style)
-        self.ch_sept_p = w.SelectMultiple(options=range(0,29+1), description='SEPT proton energies:', rows=10, style=multiselect_style)
-        self.ch_het_p =  w.SelectMultiple(options=range(0,10+1), description='HET proton energies:', rows=10, style=multiselect_style)
-        
-        self.resample = w.BoundedIntText(value=15, min=0, max=30, step=1, description='Resampling (min):', disabled=False)
-        self.resample_mag = w.BoundedIntText(value=5, min=0, max=30, step=1, description='MAG resampling (min):', disabled=False)
-        self.resample_pol = w.BoundedIntText(value=1, min=0, max=30, step=1, description='Polarity resampling (min):', disabled=False)
-        
-        self.path = None
-        self.plot_range = None
-    
-    # def disp(self):
-    #     for attr in vars(self):
-    #         if attr not in ["path", "plot_range"]:
-    #             display(vars(self)[attr])
-
-    def disp(self):
-        cb_grid = w.GridspecLayout(4, 4, width='100%')
-        date_grid = w.GridspecLayout(1, 5, width='100%')
-        multi_grid = w.GridspecLayout(1, 3, width='100%')
-        misc_grid = w.GridspecLayout(3, 2, width='100%')
-        
-        date_grid[0,0] = self.sc
-        date_grid[0,1:3] = self.startdate
-        date_grid[0,3:5] = self.enddate
-        cb_grid[0,0] = self.electrons
-        cb_grid[0,1] = self.protons
-        cb_grid[0,2] = self.het
-        cb_grid[1,0] = self.mag
-        cb_grid[1,1] = self.polarity
-        cb_grid[1,2] = self.mag_angles
-        cb_grid[2,0] = self.Vsw
-        cb_grid[2,1] = self.N
-        cb_grid[2,2] = self.T
-        cb_grid[3,0] = self.radio
-        cb_grid[3,1] = self.pad
-        multi_grid[0,0] = self.ch_sept_e
-        multi_grid[0,1] = self.ch_sept_p
-        multi_grid[0,2] = self.ch_het_p
-        misc_grid[0,0] = self.resample
-        misc_grid[1,0] = self.resample_mag
-        misc_grid[2,0] = self.resample_pol
-        misc_grid[0,1] = self.radio_cmap
-        misc_grid[1,1] = self.legends_inside
-        display(date_grid)
-        display(cb_grid)
-        display(multi_grid)
-        display(misc_grid)
-
-    # for testing purposes
-    def set_test_values(self):
-        self.radio.value = True
-        self.electrons.value  = True
-        self.Vsw.value = True
-        self.N.value = True
-        self.startdate.value = dt.datetime(2022,3,14,00)
-        self.enddate.value = dt.datetime(2022,3,16,00)
-        self.ch_het_p.value = (4, 7, 8, 9)
-        self.ch_sept_p.value = (1, 2, 3, 7, 8, 9, 10, 11, 19, 20, 21)
-        self.ch_sept_e.value = (3, 4, 5, 6, 7, 8, 12, 13, 14)
-
-        
-
-def plot_range_interval(startdate, enddate):
-    timestamps = []
-    date_iter = startdate
-    while date_iter <= enddate:
-        timestamps.append(date_iter)
-        date_iter = date_iter + dt.timedelta(hours=1)
-    return timestamps
-
-
-def date_selector(startdate=None, enddate=None):
-    """
-    An HTML work-around to display datetimes without clipping on SelectionRangeSlider readouts.
-
-    Author: Marcus Reaiche (https://github.com/jupyter-widgets/ipywidgets/issues/2855#issuecomment-966747483)
-    """
-    
-    # Define date range
-    if startdate is None and enddate is None:
-        dates = plot_range_interval(startdate=options.startdate.value, enddate=options.enddate.value)
-
-    else:
-        dates = plot_range_interval(startdate=startdate, enddate=enddate)
-
-    # First and last dates are selected by default
-    initial_selection = (0, len(dates) - 1)
-
-    # Define the date range slider: set readout to False
-    date_range_selector = w.SelectionRangeSlider(
-        options=dates,
-        description="Plot range",
-        index=initial_selection,
-        continous_update=False,
-        readout=False
-    )
-
-    # Define the display to substitute the readout
-    date_range_display = w.HTML(
-        value=(
-            f"<b>{dates[initial_selection[0]]}" + 
-            f" - {dates[initial_selection[1]]}</b>"))
-
-    # Define the date range using the widgets.HBox
-    date_range = w.HBox(
-        (date_range_selector, date_range_display))
-
-    # Callback function that updates the display
-    def callback(dts):
-        date_range_display.value = f"<b>{dts[0]} - {dts[1]}</b>"
-
-    w.interactive_output(
-        callback, 
-        {"dts": date_range_selector})
-    
-    options.plot_range = date_range
-    return date_range
-
-
-
-
 def load_swaves(dataset, startdate, enddate, path=None):
     """
     Load STEREO/WAVES data from CDAWeb.
@@ -203,8 +52,8 @@ def load_swaves(dataset, startdate, enddate, path=None):
     startdate, enddate : datetime or str
         start/end date in standard format (e.g. YYYY-mm-dd or YYYY/mm/dd, anything parseable by sunpy.time.parse_time)
     
-    dataset : string (optional)
-        dataset identifier (PSP_FLD_L3_RFS_HFR for high frequency data and  for low) (both by default)
+    dataset : string
+        dataset identifier
                         
     Returns
     -------
@@ -249,7 +98,7 @@ def load_swaves(dataset, startdate, enddate, path=None):
     return psd_sfu
 
 
-def load_data():
+def load_data(options):
     global df_sept_electrons_orig
     global df_sept_protons_orig
     global df_het_orig
@@ -269,6 +118,8 @@ def load_data():
     global enddate
     global sept_viewing
     global sc
+    global plot_protons
+    global plot_electrons
     global plot_radio
     global plot_mag
     global plot_mag_angles
@@ -276,6 +127,8 @@ def load_data():
     global plot_N
     global plot_T
     global plot_het
+    global plot_het_e
+    global plot_het_p
     global plot_polarity
     global pos_timestamp
     global path
@@ -286,15 +139,34 @@ def load_data():
     sept_viewing = options.sept_viewing.value
     sc = options.sc.value
     plot_radio = options.radio.value
+    plot_het_e = options.het_e.value
+    plot_het_p = options.het_p.value
+    plot_sept_e = options.sept_e.value
+    plot_sept_p = options.sept_p.value
     plot_mag = options.mag.value
     plot_mag_angles = options.mag_angles.value
     plot_Vsw = options.Vsw.value
     plot_N = options.N.value
     plot_T = options.T.value
-    plot_het = options.het.value
     plot_polarity = options.polarity.value
     pos_timestamp = options.pos_timestamp.value
     path = options.path
+
+    # These are BTW so confusing for the program flow
+    if plot_het_e or plot_sept_e:
+        plot_electrons = True
+    else:
+        plot_electrons = False
+
+    if plot_het_p or plot_sept_p:
+        plot_protons = True
+    else:
+        plot_protons = False
+
+    if plot_het_e or plot_het_p:
+        plot_het = True
+    else:
+        plot_het = False
 
     resample = str(options.resample.value) + "min"         # convert to form that Pandas accepts
     resample_mag = str(options.resample_mag.value) + "min"
@@ -321,8 +193,8 @@ def load_data():
       
 
     if plot_radio:
-        df_waves_hfr = load_swaves("STA_L3_WAV_HFR", startdate=startdate, enddate=enddate, path=path)
-        df_waves_lfr = load_swaves("STA_L3_WAV_LFR", startdate=startdate, enddate=enddate, path=path)
+        df_waves_hfr = load_swaves(f"ST{sc}_L3_WAV_HFR", startdate=startdate, enddate=enddate, path=path)
+        df_waves_lfr = load_swaves(f"ST{sc}_L3_WAV_LFR", startdate=startdate, enddate=enddate, path=path)
 
     if resample is not None:
         df_sept_electrons = resample_df(df_sept_electrons_orig, resample)  
@@ -350,18 +222,16 @@ def load_data():
 
 
 
-def make_plot():
+def make_plot(options):
     font_ylabel = 20
     font_legend = 10
     
-    plot_electrons = options.electrons.value
-    plot_protons = options.protons.value
     plot_mag_angles = options.mag_angles.value
     
     ch_sept_e = options.ch_sept_e.value
     ch_sept_p = options.ch_sept_p.value
     ch_het_p = options.ch_het_p.value
-    ch_het_e = range(0,2+1,1)
+    ch_het_e = (0, 1, 2)
 
     legends_inside = options.legends_inside.value
 
@@ -380,10 +250,14 @@ def make_plot():
 
     #Chosen channels
     print('Chosen channels:')
-    print(f'SEPT electrons: {ch_sept_e}, {len(ch_sept_e)}')
-    print(f'HET electrons: {ch_het_e}, {len(ch_het_e)}')
-    print(f'SEPT protons: {ch_sept_p}, {len(ch_sept_p)}')
-    print(f'HET protons: {ch_het_p}, {len(ch_het_p)}')
+    if plot_electrons:
+        print(f'SEPT electrons: {ch_sept_e}, {len(ch_sept_e)}')
+        if plot_het:
+            print(f'HET electrons: {ch_het_e}, {len(ch_het_e)}')
+    if plot_protons:
+        print(f'SEPT protons: {ch_sept_p}, {len(ch_sept_p)}')
+        if plot_het:
+            print(f'HET protons: {ch_het_p}, {len(ch_het_p)}')
 
     panels = 1*plot_radio + 1*plot_electrons + 1*plot_protons  + 2*plot_mag_angles + 1*plot_mag + 1* plot_Vsw + 1* plot_N + 1* plot_T # + 1*plot_pad
 
@@ -434,7 +308,7 @@ def make_plot():
         for channel in ch_sept_e:
             axs[i].plot(df_sept_electrons.index, df_sept_electrons[f'ch_{channel+2}'],
                         ds="steps-mid", label='SEPT '+meta_se.ch_strings[channel+2])
-        if plot_het:
+        if plot_het_e:
             # plot het electron channels
             axs[i].set_prop_cycle('color', plt.cm.PuRd_r(np.linspace(0,1,4+color_offset)))
             for channel in ch_het_e:
@@ -463,7 +337,7 @@ def make_plot():
                     label='SEPT '+meta_sp.ch_strings[channel+2], ds="steps-mid")
         
         color_offset = 0 
-        if plot_het:
+        if plot_het_p:
             # plot het proton channels
             axs[i].set_prop_cycle('color', plt.cm.YlOrRd(np.linspace(0.2,1,len(ch_het_p)+color_offset)))
             for channel in ch_het_p:
@@ -578,56 +452,4 @@ def make_plot():
 
     return fig, axs
 
-def update_options():
-    global startdate
-    global enddate
-    global sept_viewing
-    global sc
-    global plot_radio
-    global plot_mag
-    global plot_mag_angles
-    global plot_Vsw
-    global plot_N
-    global plot_T
-    global plot_het
-    global plot_polarity
-    global pos_timestamp
-    global path
-    global plot_electrons
-    global plot_protons
-    global ch_sept_e
-    global ch_sept_p
-    global ch_het_p
-    global ch_het_e
-    global legends_inside
-    global t_start
-    global t_end
 
-    startdate = options.startdate.value
-    enddate = options.enddate.value
-    sept_viewing = options.sept_viewing.value
-    sc = options.sc.value
-    plot_radio = options.radio.value
-    plot_mag = options.mag.value
-    plot_mag_angles = options.mag_angles.value
-    plot_Vsw = options.Vsw.value
-    plot_N = options.N.value
-    plot_T = options.T.value
-    plot_het = options.het.value
-    plot_polarity = options.polarity.value
-    pos_timestamp = options.pos_timestamp.value
-    path = options.path
-    plot_electrons = options.electrons.value
-    plot_protons = options.protons.value
-    plot_mag_angles = options.mag_angles.value
-    
-    ch_sept_e = options.ch_sept_e.value
-    ch_sept_p = options.ch_sept_p.value
-    ch_het_p = options.ch_het_p.value
-
-    legends_inside = options.legends_inside.value
-
-    t_start = options.plot_range.children[0].value[0]
-    t_end = options.plot_range.children[0].value[1]
-
-options = Options()
