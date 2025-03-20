@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 import warnings
+import sunpy
 
 from astropy.constants import e, k_B, m_p
 from astropy.table import QTable
@@ -19,8 +20,7 @@ from seppy.tools import resample_df
 from stixdcpy.quicklook import LightCurves # https://github.com/i4Ds/stixdcpy
 from sunpy.coordinates import frames, get_horizons_coord
 
-from soler.tools.my_func_py3 import mag_angles
-from soler.tools.polarity_plotting import polarity_rtn
+from tools.polarity_plotting import polarity_rtn
 
 # disable unused speasy data provider before importing to speed it up
 os.environ['SPEASY_CORE_DISABLED_PROVIDERS'] = "sscweb,archive,csa"
@@ -30,6 +30,8 @@ from IPython.core.display import display
 
 # omit Pandas' PerformanceWarning
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
+warnings.filterwarnings(action='ignore', category=sunpy.util.SunpyUserWarning, module='sunpy.io._cdf')
+warnings.filterwarnings(action='ignore', category=UserWarning, message='no explicit representation of timezones available', module='speasy.core.data_containers')
 
 plt.rcParams['axes.linewidth'] = 1.5
 plt.rcParams['font.size'] = 12
@@ -39,26 +41,33 @@ plt.rc('axes', titlesize=20)  # fontsize of the axes title
 plt.rc('axes', labelsize=20)  # fontsize of the x and y labels
 plt.rcParams['agg.path.chunksize'] = 20000
 
-import ipywidgets as w
-import seppy.tools.widgets as seppyw
 
-# def selection():
-#     options = ["RFS", "STIX", "EPI-lo electrons", "EPI-hi electrons", "EPI-lo protons", "EPI-hi protons", "MAG", "MAG angles", "V_sw", "N", "T", "P_dyn", "Polarity"]
-#     boxes = dict(zip(options, [w.Checkbox(value=False, description=quant, indent=False) for quant in options]))
-#     for option in options:
-#         display(boxes[option])
-    
-    
+def mag_angles(B,Br,Bt,Bn):
+    theta = np.arccos(Bn/B)
+    alpha = 90-(180/np.pi*theta)
 
-def load_data(opt):
+    r = np.sqrt(Br**2 + Bt**2 + Bn**2)
+    phi = np.arccos(Br/np.sqrt(Br**2 + Bt**2))*180/np.pi
+
+    sel = np.where(Bt < 0)
+    count = len(sel[0])
+    if count > 0:
+        phi[sel] = 2*np.pi - phi[sel]
+    sel = np.where(r <= 0)
+    count = len(sel[0])
+    if count > 0:
+        phi[sel] = 0
+
+    return alpha, phi
+
+def load_data(options):
     """
     Load data used in plotting.
     
     Parameters
     ----------
 
-    options : {dict} 
-        dictionary of plotting options
+    options : Options object
 
     Returns
     -------
@@ -68,113 +77,167 @@ def load_data(opt):
     """
     
 
-    data = {}
-
     #####################################################################
     ######## Data loading ###############################################
     #####################################################################
+    
+    global enddate
+    global startdate
+    global file_path
 
-    if opt["plot_epilo_e"] or opt["plot_epihi_e"]:
-        opt["plot_electrons"] = True
-    else:
-        opt["plot_electrons"] = False
+    global plot_epilo_e
+    global plot_epihi_e
+    global plot_epilo_p
+    global plot_epihi_p
+    global plot_electrons
+    global plot_protons
+    global plot_stix
+    global plot_radio
+    global plot_mag
+    global plot_mag_angles
+    global plot_Vsw
+    global plot_N
+    global plot_T
+    global plot_p_dyn
+    global resample
+    global resample_mag
+    
+    global epilo_ic_channel
+    global epilo_channel
+    global stix_ltc
+    
+    global psp_het_energies
+    global psp_rfs_lfr_psd
+    global psp_rfs_hfr_psd
+    global df_magplas_spc
+    global df_magplas_spani
+    global mag
+    global stix
+    global psp_epilo_energies_org
+    global psp_epilo_ic_energies_org
+    global psp_het
+    global psp_epilo_ic
+    global psp_epilo
 
-    if opt["plot_epilo_p"] or opt["plot_epihi_p"]:
-        opt["plot_protons"] = True
-    else:
-        opt["plot_protons"] = False
+    enddate = options.enddate.value
+    startdate = options.startdate.value
+    file_path = options.path
 
-    if opt["plot_stix"]:
-        if opt["enddate"]-opt["startdate"] > dt.timedelta(days=7):
+    plot_epilo_e = options.psp_epilo_e.value
+    plot_epihi_e = options.psp_epihi_e.value
+    plot_epilo_p = options.psp_epilo_p.value
+    plot_epihi_p = options.psp_epihi_p.value
+    plot_stix = options.stix.value
+    plot_radio = options.radio.value
+    plot_mag = options.mag.value
+    plot_mag_angles = options.mag_angles.value
+    plot_Vsw = options.Vsw.value
+    plot_N = options.N.value
+    plot_T = options.T.value
+    plot_p_dyn = options.p_dyn.value
+    
+    resample = str(options.resample.value) + "min"         # convert to form that Pandas accepts
+    resample_mag = str(options.resample_mag.value) + "min"
+    
+    epilo_ic_channel = options.psp_epilo_ic_channel.value
+    epilo_channel = options.psp_epilo_channel.value
+    #stix_ltc = options.stix_ltc.value
+
+    plot_electrons = plot_epilo_e or plot_epihi_e
+    plot_protons = plot_epilo_p or plot_epihi_p
+
+
+    if plot_stix:
+        if enddate-startdate > dt.timedelta(days=7):
             print('WARNING: STIX loading for more than 7 days not supported at the moment!')
             print('')
-        lc = LightCurves.from_sdc(start_utc=opt["startdate"], end_utc=opt["enddate"], ltc=opt["stix_ltc"])
-        data["stix_orig"] = lc.to_pandas()
+        lc = LightCurves.from_sdc(start_utc=startdate, end_utc=enddate, ltc=stix_ltc)
+        stix_orig = lc.to_pandas()
         
-    if opt["plot_epihi_p"] or opt["plot_epihi_e"]:
-        data["psp_het_org"], data["psp_het_energies"] = psp_isois_load('PSP_ISOIS-EPIHI_L2-HET-RATES60', opt["startdate"], opt["enddate"], 
-                                                                       path=opt["file_path"], resample=None)
+    if plot_epihi_p or plot_epihi_e:
+        psp_het_org, psp_het_energies = psp_isois_load('PSP_ISOIS-EPIHI_L2-HET-RATES60', startdate, enddate, 
+                                                                       path=file_path, resample=None)
 
-    if opt["plot_epilo_e"]:
-        data["psp_epilo_org"], data["psp_epilo_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-PE', opt["startdate"], opt["enddate"], 
-                                                                               path=opt["file_path"], resample=None, epilo_channel=opt["epilo_channel"], 
+    if plot_epilo_e:
+        psp_epilo_org, psp_epilo_energies_org = psp_isois_load('PSP_ISOIS-EPILO_L2-PE', startdate, enddate, 
+                                                                               path=file_path, resample=None, epilo_channel=epilo_channel, 
                                                                                epilo_threshold=None)
-        electron_countrate_keys = data["psp_epilo_org"].filter(like='Electron_CountRate_ChanF_E').keys()
-        data["psp_epilo_org"][electron_countrate_keys] = data["psp_epilo_org"][electron_countrate_keys].mask(data["psp_epilo_org"][electron_countrate_keys] < 0.0)
+        electron_countrate_keys = psp_epilo_org.filter(like='Electron_CountRate_ChanF_E').keys()
+        psp_epilo_org[electron_countrate_keys] = psp_epilo_org[electron_countrate_keys].mask(psp_epilo_org[electron_countrate_keys] < 0.0)
         
 
-    if opt["plot_epilo_p"]:
-        data["psp_epilo_ic_org"], data["psp_epilo_ic_energies_org"] = psp_isois_load('PSP_ISOIS-EPILO_L2-IC', opt["startdate"], opt["enddate"], 
-                                                                                     path=opt["file_path"], resample=None, epilo_channel=opt["epilo_ic_channel"], 
+    if plot_epilo_p:
+        psp_epilo_ic_org, psp_epilo_ic_energies_org = psp_isois_load('PSP_ISOIS-EPILO_L2-IC', startdate, enddate, 
+                                                                                     path=file_path, resample=None, epilo_channel=epilo_ic_channel, 
                                                                                      epilo_threshold=None)
 
-    if opt["plot_radio"]:
+    if plot_radio:
         psp_rfs_lfr_psd = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSP_FLD.RFS_LFR.PSP_FLD_L3_RFS_LFR.psp_fld_l3_rfs_lfr_PSD_SFU,
-                                        opt["startdate"], opt["enddate"]).replace_fillval_by_nan()
+                                        startdate, enddate).replace_fillval_by_nan()
         psp_rfs_hfr_psd = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSP_FLD.RFS_HFR.PSP_FLD_L3_RFS_HFR.psp_fld_l3_rfs_hfr_PSD_SFU, 
-                                        opt["startdate"], opt["enddate"]).replace_fillval_by_nan()
+                                        startdate, enddate).replace_fillval_by_nan()
 
         # Get frequency (MHz) bins, since metadata is lost upon conversion to df
         psp_rfs_lfr_freq = psp_rfs_lfr_psd.axes[1].values[0] / 1e6     
         psp_rfs_hfr_freq = psp_rfs_hfr_psd.axes[1].values[0] / 1e6
 
         # frequencies overlap, so leave the last seven out
-        data["psp_rfs_lfr_psd"] = psp_rfs_lfr_psd.to_dataframe().iloc[:,:-6]
-        data["psp_rfs_hfr_psd"] = psp_rfs_hfr_psd.to_dataframe()
+        psp_rfs_lfr_psd = psp_rfs_lfr_psd.to_dataframe().iloc[:,:-6]
+        psp_rfs_hfr_psd = psp_rfs_hfr_psd.to_dataframe()
     
         # put frequencies into column names for easier access
-        data["psp_rfs_lfr_psd"].columns = psp_rfs_lfr_freq[:-6]
-        data["psp_rfs_hfr_psd"].columns = psp_rfs_hfr_freq
+        psp_rfs_lfr_psd.columns = psp_rfs_lfr_freq[:-6]
+        psp_rfs_hfr_psd.columns = psp_rfs_hfr_freq
 
         # Remove bar artifacts caused by non-NaN values before time jumps
-        for i in range(len(data["psp_rfs_lfr_psd"].index) - 1):
-            if (data["psp_rfs_lfr_psd"].index[i+1] - data["psp_rfs_lfr_psd"].index[i]) > np.timedelta64(5, "m"):   
-                data["psp_rfs_lfr_psd"].iloc[i,:] = np.nan
-        for i in range(len(data["psp_rfs_hfr_psd"].index) - 1):
-            if (data["psp_rfs_hfr_psd"].index[i+1] - data["psp_rfs_hfr_psd"].index[i]) > np.timedelta64(5, "m"):
-                data["psp_rfs_hfr_psd"].iloc[i,:] = np.nan
+        for i in range(len(psp_rfs_lfr_psd.index) - 1):
+            if (psp_rfs_lfr_psd.index[i+1] - psp_rfs_lfr_psd.index[i]) > np.timedelta64(5, "m"):   
+                psp_rfs_lfr_psd.iloc[i,:] = np.nan
+        for i in range(len(psp_rfs_hfr_psd.index) - 1):
+            if (psp_rfs_hfr_psd.index[i+1] - psp_rfs_hfr_psd.index[i]) > np.timedelta64(5, "m"):
+                psp_rfs_hfr_psd.iloc[i,:] = np.nan
 
-    if opt["plot_mag"]:
+    if plot_mag:
         df_psp_mag_rtn = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.FIELDS_MAG.psp_mag_1min.psp_b_1min, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_mag_phi = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.FIELDS_MAG.psp_mag_1min.psp_b_1min_phi, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_mag_theta = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.FIELDS_MAG.psp_mag_1min.psp_b_1min_theta, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_mag_tot = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.FIELDS_MAG.psp_mag_1min.psp_b_1min_tot, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         
-        data["psp_mag"] = pd.concat([df_psp_mag_rtn, df_psp_mag_phi, df_psp_mag_theta, df_psp_mag_tot], axis=1)
-        data["psp_mag"]['phi_mod'] = ((data["psp_mag"]['phi'].values - 180) % 360) - 180
+        psp_mag = pd.concat([df_psp_mag_rtn, df_psp_mag_phi, df_psp_mag_theta, df_psp_mag_tot], axis=1)
+        psp_mag['phi_mod'] = ((psp_mag['phi'].values - 180) % 360) - 180
 
-    if opt["plot_mag_angles"]:
-        theta, phi = mag_angles(data["psp_mag"]['|b|'].values, data["psp_mag"]['br'].values, data["psp_mag"]['bt'].values, data["psp_mag"]['bn'].values)
-        data["psp_mag"]['theta2'] = theta
-        data["psp_mag"]['phi2'] = phi
+    if plot_mag_angles:
+        theta, phi = mag_angles(psp_mag['|b|'].values, psp_mag['br'].values, psp_mag['bt'].values, psp_mag['bn'].values)
+        psp_mag['theta2'] = theta
+        psp_mag['phi2'] = phi
 
-    if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
+    if plot_Vsw or plot_N or plot_T or plot_p_dyn:
         # SPC
         df_psp_spc_np_tot = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_np_tot, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_spc_vp_tot_nrm = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot_nrm, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_spc_vp_tot_rtn = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_vp_tot, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_spc_wp_tot = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_fit.psp_spc_wp_tot, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_spc_GF = spz.get_data(spz.inventories.data_tree.amda.Parameters.PSP.SWEAP_SPC.psp_spc_flag.psp_spc_gf, 
-                                    opt["startdate"], opt["enddate"], output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate, output_format="CDF_ISTP").replace_fillval_by_nan().to_dataframe()
         df_psp_spc = pd.concat([df_psp_spc_np_tot, df_psp_spc_vp_tot_nrm, df_psp_spc_vp_tot_rtn, df_psp_spc_wp_tot, df_psp_spc_GF], axis=1)
 
         # SPAN-i
         df_psp_spani_np = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.DENS, 
-                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate).replace_fillval_by_nan().to_dataframe()
         df_psp_spani_vp_rtn_sun = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.VEL_RTN_SUN, 
-                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate).replace_fillval_by_nan().to_dataframe()
         df_psp_spani_T = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.TEMP, 
-                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate).replace_fillval_by_nan().to_dataframe()
         df_psp_spani_QF = spz.get_data(spz.inventories.data_tree.cda.ParkerSolarProbe.PSPSWEAPSPAN.PSP_SWP_SPI_SF00_L3_MOM.QUALITY_FLAG, 
-                                    opt["startdate"], opt["enddate"]).replace_fillval_by_nan().to_dataframe()
+                                    startdate, enddate).replace_fillval_by_nan().to_dataframe()
         df_psp_spani = pd.concat([df_psp_spani_np, df_psp_spani_vp_rtn_sun, df_psp_spani_T, df_psp_spani_QF], axis=1)
 
         # Read units into dictionary
@@ -261,87 +324,95 @@ def load_data(opt):
     ############## Resampling #######################################
     #################################################################
 
-    if opt["resample"] is not None:
-        if opt["plot_epihi_e"] or opt["plot_epihi_p"]:
-            data["psp_het"] = resample_df(data["psp_het_org"], opt["resample"])   
-        if opt["plot_epilo_e"]:
-            data["psp_epilo"] = resample_df(data["psp_epilo_org"], opt["resample"]) 
-        if opt["plot_epilo_p"]:
-            data["psp_epilo_ic"] = resample_df(data["psp_epilo_ic_org"], opt["resample"]) 
+    if resample is not None:
+        if plot_epihi_e or plot_epihi_p:
+            psp_het = resample_df(psp_het_org, resample)   
+        if plot_epilo_e:
+            psp_epilo = resample_df(psp_epilo_org, resample) 
+        if plot_epilo_p:
+            psp_epilo_ic = resample_df(psp_epilo_ic_org, resample) 
         # if plot_psp_pixel:
         #     df_psp_pixel = resample_df(df_psp_pixel_org, resample) 
-        if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
-            data["df_magplas_spani"] = resample_df(df_psp_spani, opt["resample_mag"]) 
-            data["df_magplas_spc"] = resample_df(df_psp_spc, opt["resample_mag"])
-        if opt["plot_mag"]:
-            data["mag"] = resample_df(data["psp_mag"], opt["resample_mag"]) 
-        if opt["plot_stix"]:
-            data["stix"] = resample_df(data["stix_orig"], opt["resample"])
+        if plot_Vsw or plot_N or plot_T or plot_p_dyn:
+            df_magplas_spani = resample_df(df_psp_spani, resample_mag) 
+            df_magplas_spc = resample_df(df_psp_spc, resample_mag)
+        if plot_mag:
+            mag = resample_df(psp_mag, resample_mag) 
+        if plot_stix:
+            stix = resample_df(stix_orig, resample)
     
         
         else:
-            if opt["plot_epihi_e"] or opt["plot_epihi_p"]:
-                data["psp_het"] = data["psp_het_org"] 
-            if opt["plot_epilo_e"]:
-                data["psp_epilo"] = data["psp_epilo_org"]
-            if opt["plot_epilo_p"]:
-                data["psp_epilo_ic"] = data["psp_epilo_ic_org"]
+            if plot_epihi_e or plot_epihi_p:
+                psp_het = psp_het_org 
+            if plot_epilo_e:
+                psp_epilo = psp_epilo_org
+            if plot_epilo_p:
+                psp_epilo_ic = psp_epilo_ic_org
             # if plot_psp_pixel:
             #     df_psp_pixel = df_psp_pixel_org
-            if opt["plot_Vsw"] or opt["plot_N"] or opt["plot_T"] or opt["plot_p_dyn"]:
-                data["df_magplas_spani"] = df_psp_spani 
-                data["df_magplas_spc"] = df_psp_spc
-            if opt["plot_mag"]:
-                data["mag"] = data["psp_mag"]
-            if opt["plot_stix"]:
-                data["stix"] = data["stix_orig"]
+            if plot_Vsw or plot_N or plot_T or plot_p_dyn:
+                df_magplas_spani = df_psp_spani 
+                df_magplas_spc = df_psp_spc
+            if plot_mag:
+                mag = psp_mag
+            if plot_stix:
+                stix = stix_orig
     
 
+def make_plot(options):
+    """
+    Plot chosen data with user-specified parameters.
+    """
+    
+    plot_polarity = options.polarity.value
+    plot_epihi_p_combined_pixels = options.psp_epihi_p_combined_pixels.value
+    
+    
+    psp_het_viewing = options.psp_het_viewing.value
+    epilo_ic_viewing = options.psp_epilo_ic_viewing.value
+    epilo_viewing = options.psp_epilo_viewing.value
+
+    ch_het_p = options.psp_ch_het_p.value
+    ch_epilo_ic = options.psp_ch_epilo_ic.value
+    ch_het_e = options.psp_ch_het_e.value
+    ch_epilo_e = options.psp_ch_epilo_e.value
+    
+    legends_inside = options.legends_inside.value
+    cmap = options.radio_cmap.value
+    
     ############################################################################
     ############## Energy channel ranges #######################################
     ############################################################################
 
-    if opt["plot_protons"]:  
-        #Channels list
-        
-        opt["channels_n_psp_het_p"] = list(np.arange(0, len(data["psp_het"].filter(like=f'{opt["psp_het_viewing"]}_H_Flux_').keys()), opt["n_psp_het_p"]))
-        opt["channels_n_psp_epilo_ic"] = list(np.arange(0, 31, opt["n_psp_epilo_ic"]))
-
+    if plot_protons:  
         #Chosen channels
         print('Chosen proton channels:')
-        print('psp_het_p:', opt["channels_n_psp_het_p"], ',', len(opt["channels_n_psp_het_p"]))
-        print('psp_epilo_ic:', opt["channels_n_psp_epilo_ic"], ',', len(opt["channels_n_psp_epilo_ic"]))
+        print('HET protons:', ch_het_p, ',', len(ch_het_p))
+        print('EPI-Lo ic:', ch_epilo_ic, ',', len(ch_epilo_ic))
 
-    if opt["plot_electrons"]:
-        opt["channels_n_psp_het_e"] = list(np.arange(0, len(data["psp_het"].filter(like=f'{opt["psp_het_viewing"]}_Electrons_Rate_').keys()), opt["n_psp_het_e"]))
-        opt["channels_n_psp_epilo_e"] = list(np.arange(3, 8, opt["n_psp_epilo_e"])) # list(np.arange(0, len(data["psp_epilo"].filter(like='Electron_CountRate_ChanF').keys()), n_psp_epilo_e))
-
+    if plot_electrons:
         print('Chosen electron channels:')
-        print('psp_epilo_e:', opt["channels_n_psp_epilo_e"], ',', len(opt["channels_n_psp_epilo_e"]))
-        print('psp_het_e:', opt["channels_n_psp_het_e"], ',', len(opt["channels_n_psp_het_e"]))
+        print('HET electrons:', ch_het_e, ',', len(ch_het_e))
+        print('EPI-Lo electrons:', ch_epilo_e, ',', len(ch_epilo_e))
+        
+    
 
-    return data
-
-def make_plot(data, opt):
-    """
-    Plot chosen data with user-specified parameters.
-    """
-
-    panels = 1*opt["plot_radio"] + 1*opt["plot_stix"] + 1*opt["plot_electrons"] + 1*opt["plot_protons"] + 2*opt["plot_mag_angles"] + 1*opt["plot_mag"] + 1*opt["plot_Vsw"] + 1*opt["plot_N"] + 1*opt["plot_T"] + 1*opt["plot_p_dyn"] 
+    panels = 1*plot_radio + 1*plot_stix + 1*plot_electrons + 1*plot_protons + 2*plot_mag_angles + 1*plot_mag + 1*plot_Vsw + 1*plot_N + 1*plot_T + 1*plot_p_dyn 
 
     panel_ratios = list(np.zeros(panels)+1)
 
-    if opt["plot_radio"]:
+    if plot_radio:
         panel_ratios[0] = 2
 
-    if opt["plot_electrons"] and opt["plot_protons"]:
-        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
-        panel_ratios[1+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
-    if opt["plot_electrons"] or opt["plot_protons"]:    
-        panel_ratios[0+1*opt["plot_stix"]+1*opt["plot_radio"]] = 2
+    if plot_electrons and plot_protons:
+        panel_ratios[0+1*plot_stix+1*plot_radio] = 2
+        panel_ratios[1+1*plot_stix+1*plot_radio] = 2
+    if plot_electrons or plot_protons:    
+        panel_ratios[0+1*plot_stix+1*plot_radio] = 2
 
-    FONT_YLABEL = 20
-    FONT_LEGEND = 10
+    font_ylabel = 20
+    font_legend = 10
     
     if panels == 3:
         fig, axs = plt.subplots(nrows=panels, sharex=True, figsize=[12, 4*panels])#, gridspec_kw={'height_ratios': panel_ratios})# layout="constrained")
@@ -352,86 +423,86 @@ def make_plot(data, opt):
     
     i = 0
 
-    if opt["plot_radio"]:
+    if plot_radio:
         vmin, vmax = 500, 1e7
         log_norm = LogNorm(vmin=vmin, vmax=vmax)
         
-        TimeHFR2D, FreqHFR2D = np.meshgrid(data["psp_rfs_hfr_psd"].index, data["psp_rfs_hfr_psd"].columns, indexing='ij')
-        TimeLFR2D, FreqLFR2D = np.meshgrid(data["psp_rfs_lfr_psd"].index, data["psp_rfs_lfr_psd"].columns, indexing='ij')
+        TimeHFR2D, FreqHFR2D = np.meshgrid(psp_rfs_hfr_psd.index, psp_rfs_hfr_psd.columns, indexing='ij')
+        TimeLFR2D, FreqLFR2D = np.meshgrid(psp_rfs_lfr_psd.index, psp_rfs_lfr_psd.columns, indexing='ij')
 
         # Create colormeshes. Shading option flat and thus the removal of last row and column are there to solve the time jump bar problem, 
         # when resampling isn't used
-        mesh = axs[i].pcolormesh(TimeLFR2D, FreqLFR2D, data["psp_rfs_lfr_psd"].iloc[:-1,:-1], shading='flat', cmap='jet', norm=log_norm)
-        axs[i].pcolormesh(TimeHFR2D, FreqHFR2D, data["psp_rfs_hfr_psd"].iloc[:-1,:-1], shading='flat', cmap='jet', norm=log_norm)
+        mesh = axs[i].pcolormesh(TimeLFR2D, FreqLFR2D, psp_rfs_lfr_psd.iloc[:-1,:-1], shading='flat', cmap=cmap, norm=log_norm)
+        axs[i].pcolormesh(TimeHFR2D, FreqHFR2D, psp_rfs_hfr_psd.iloc[:-1,:-1], shading='flat', cmap=cmap, norm=log_norm)
 
         axs[i].set_yscale('log')
-        axs[i].set_ylabel("Frequency (MHz)", fontsize=FONT_YLABEL)
+        axs[i].set_ylabel("Frequency (MHz)", fontsize=font_ylabel)
         
         # Add inset axes for colorbar
         axins = inset_axes(axs[i], width="100%", height="100%", loc="center", bbox_to_anchor=(1.05,0,0.03,1), bbox_transform=axs[i].transAxes, borderpad=0.2)
         cbar = fig.colorbar(mesh, cax=axins, orientation="vertical")
-        cbar.set_label("Intensity (sfu)", rotation=90, labelpad=10, fontsize=FONT_YLABEL)
+        cbar.set_label("Intensity (sfu)", rotation=90, labelpad=10, fontsize=font_ylabel)
         i += 1
         
     
-    if opt["plot_stix"]:
-        for key in data["stix"].keys():
-            axs[i].plot(data["stix"].index, data["stix"][key], ds="steps-mid", label=key)
-        if opt["stix_ltc"]:
+    if plot_stix:
+        for key in stix.keys():
+            axs[i].plot(stix.index, stix[key], ds="steps-mid", label=key)
+        if stix_ltc:
             title = 'SolO/STIX (light travel time corrected)'
         else:
             title = 'SolO/STIX'
-        if opt["legends_inside"]:
+        if legends_inside:
             axs[i].legend(loc='upper right', title=title)
         else:
             # axs[i].legend(loc='upper right', title=title, bbox_to_anchor=(1, 0.5))
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left', title=title)
-        axs[i].set_ylabel('Counts', fontsize=FONT_YLABEL)
+        axs[i].set_ylabel('Counts', fontsize=font_ylabel)
         axs[i].set_yscale('log')
         i +=1  
     
     
     color_offset = 4 
     
-    if opt["plot_electrons"]:
-        if opt["plot_epilo_e"]:
-            axs[i].set_prop_cycle('color', plt.cm.viridis_r(np.linspace(0, 1, len(opt["channels_n_psp_epilo_e"])+color_offset)))
-            for channel in opt["channels_n_psp_epilo_e"]:
-                psp_epilo_energy = np.round(data["psp_epilo_energies_org"][f'Electron_Chan{opt["epilo_channel"]}_Energy'][f'Electron_Chan{opt["epilo_channel"]}_Energy_E{channel}_P{opt["epilo_viewing"]}'], 2).astype(str)
-                axs[i].plot(data["psp_epilo"].index, data["psp_epilo"][f'Electron_CountRate_Chan{opt["epilo_channel"]}_E{channel}_P{opt["epilo_viewing"]}'],
-                            ds="steps-mid", label=f'EPI-lo PE {opt["epilo_channel"]}{opt["epilo_viewing"]} {psp_epilo_energy} keV')
+    if plot_electrons:
+        if plot_epilo_e:
+            axs[i].set_prop_cycle('color', plt.cm.viridis_r(np.linspace(0, 1, len(ch_epilo_e)+color_offset)))
+            for channel in ch_epilo_e:
+                psp_epilo_energy = np.round(psp_epilo_energies_org[f'Electron_Chan{epilo_channel}_Energy'][f'Electron_Chan{epilo_channel}_Energy_E{channel}_P{epilo_viewing}'], 2).astype(str)
+                axs[i].plot(psp_epilo.index, psp_epilo[f'Electron_CountRate_Chan{epilo_channel}_E{channel}_P{epilo_viewing}'],
+                            ds="steps-mid", label=f'EPI-lo PE {epilo_channel}{epilo_viewing} {psp_epilo_energy} keV')
     
-        if opt["plot_epihi_e"]:
-            axs[i].set_prop_cycle('color', plt.cm.Reds_r(np.linspace(0, 1, len(opt["channels_n_psp_het_e"])+color_offset)))
-            for channel in opt["channels_n_psp_het_e"]:
-                axs[i].plot(data["psp_het"].index, data["psp_het"][f'{opt["psp_het_viewing"]}_Electrons_Rate_{channel}'],
-                            ds="steps-mid", label=f'HET {opt["psp_het_viewing"]}'+data["psp_het_energies"]['Electrons_ENERGY_LABL'].flatten()[channel])
+        if plot_epihi_e:
+            axs[i].set_prop_cycle('color', plt.cm.Reds_r(np.linspace(0, 1, len(ch_het_e)+color_offset)))
+            for channel in ch_het_e:
+                axs[i].plot(psp_het.index, psp_het[f'{psp_het_viewing}_Electrons_Rate_{channel}'],
+                            ds="steps-mid", label=f'HET {psp_het_viewing}'+psp_het_energies['Electrons_ENERGY_LABL'].flatten()[channel])
                 
         # axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=FONT_YLABEL)
-        axs[i].set_ylabel("Count rates", fontsize=FONT_YLABEL)
-        if opt["legends_inside"]:
+        axs[i].set_ylabel("Count rates", fontsize=font_ylabel)
+        if legends_inside:
             axs[i].legend(loc='upper right', borderaxespad=0., 
                           title=f'Electrons',
-                          fontsize=FONT_LEGEND)
+                          fontsize=font_legend)
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0., 
                           title=f'Electrons',
-                          fontsize=FONT_LEGEND)
+                          fontsize=font_legend)
        
         axs[i].set_yscale('log')
         i +=1    
     
         
     color_offset = 2    
-    if opt["plot_protons"]:
-        if opt["plot_epilo_p"]:
-            axs[i].set_prop_cycle('color', plt.cm.viridis_r(np.linspace(0, 1, len(opt["channels_n_psp_epilo_ic"])+color_offset)))
+    if plot_protons:
+        if plot_epilo_p:
+            axs[i].set_prop_cycle('color', plt.cm.viridis_r(np.linspace(0, 1, len(ch_epilo_ic)+color_offset)))
             # [::-1] to reverse list
-            for channel in opt["channels_n_psp_epilo_ic"][::-1]:
+            for channel in ch_epilo_ic[::-1]:
                 # print(f'H_Flux_Chan{epilo_ic_channel}_E{channel}_P{epilo_ic_viewing}')
-                psp_epilo_ic_energy = np.round(data["psp_epilo_ic_energies_org"][f'H_Chan{opt["epilo_ic_channel"]}_Energy'][f'H_Chan{opt["epilo_ic_channel"]}_Energy_E{channel}_P{opt["epilo_ic_viewing"]}'], 2).astype(str)
-                axs[i].plot(data["psp_epilo_ic"].index, data["psp_epilo_ic"][f'H_Flux_Chan{opt["epilo_ic_channel"]}_E{channel}_P{opt["epilo_ic_viewing"]}'],
-                            ds="steps-mid", label=f'EPI-lo IC {opt["epilo_ic_channel"]}{opt["epilo_ic_viewing"]} {psp_epilo_ic_energy} keV')
+                psp_epilo_ic_energy = np.round(psp_epilo_ic_energies_org[f'H_Chan{epilo_ic_channel}_Energy'][f'H_Chan{epilo_ic_channel}_Energy_E{channel}_P{epilo_ic_viewing}'], 2).astype(str)
+                axs[i].plot(psp_epilo_ic.index, psp_epilo_ic[f'H_Flux_Chan{epilo_ic_channel}_E{channel}_P{epilo_ic_viewing}'],
+                            ds="steps-mid", label=f'EPI-lo IC {epilo_ic_channel}{epilo_ic_viewing} {psp_epilo_ic_energy} keV')
     
         # if plot_psp_pixel:
         #     axs[i].set_prop_cycle('color', plt.cm.tab10(range(6)))
@@ -439,30 +510,30 @@ def make_plot(data, opt):
         #     # for key in ['L2Ap', 'L4Ap', 'H2Ap', 'H3Ap', 'H4Ap']:
         #         axs[i].plot(df_psp_pixel.index, df_psp_pixel[f'{key}_Flux'], label=f'{key} {energies_psp_pixel[key]}', drawstyle='steps-mid')
         
-        if opt["plot_epihi_p"]:    
-            if opt["plot_epihi_p_combined_pixels"]:
+        if plot_epihi_p:    
+            if plot_epihi_p_combined_pixels:
                 # comb_channels = [[1,2], [3,5], [5,7], [4,5], [7], [9]]
                 comb_channels = [[3,5], [5,7], [4,5], [7], [9]]
                 axs[i].set_prop_cycle('color', plt.cm.Greys_r(np.linspace(0, 1, len(comb_channels)+5)))
                 for channel in comb_channels:
-                    df_psp_epihi, df_psp_epihi_name = calc_av_en_flux_PSP_EPIHI(data["psp_het"], data["psp_het_energies"], channel, 'p', 'het', opt["psp_het_viewing"])
-                    axs[i].plot(df_psp_epihi.index, df_psp_epihi.flux, label=f'HET {opt["psp_het_viewing"]}{df_psp_epihi_name}', lw=1, ds="steps-mid")
+                    df_psp_epihi, df_psp_epihi_name = calc_av_en_flux_PSP_EPIHI(psp_het, psp_het_energies, channel, 'p', 'het', psp_het_viewing)
+                    axs[i].plot(df_psp_epihi.index, df_psp_epihi.flux, label=f'HET {psp_het_viewing}{df_psp_epihi_name}', lw=1, ds="steps-mid")
             else:
-                axs[i].set_prop_cycle('color', plt.cm.plasma(np.linspace(0, 1, len(opt["channels_n_psp_het_p"])+color_offset)))
-                for channel in opt["channels_n_psp_het_p"]:
-                    axs[i].plot(data["psp_het"].index, data["psp_het"][f'{opt["psp_het_viewing"]}_H_Flux_{channel}'], label=f'HET {opt["psp_het_viewing"]}'+data["psp_het_energies"]['H_ENERGY_LABL'].flatten()[channel], ds="steps-mid")
+                axs[i].set_prop_cycle('color', plt.cm.plasma(np.linspace(0, 1, len(ch_het_p)+color_offset)))
+                for channel in ch_het_p:
+                    axs[i].plot(psp_het.index, psp_het[f'{psp_het_viewing}_H_Flux_{channel}'], label=f'HET {psp_het_viewing}'+psp_het_energies['H_ENERGY_LABL'].flatten()[channel], ds="steps-mid")
         
-        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=FONT_YLABEL)
+        axs[i].set_ylabel("Flux\n"+r"[(cm$^2$ sr s MeV)$^{-1}]$", fontsize=font_ylabel)
         # title = f'Ions (HET {psp_het_viewing})'
         title = f'Ions (Pixel)'
-        if opt["legends_inside"]:
+        if legends_inside:
             axs[i].legend(loc='upper right', borderaxespad=0., 
                           title=title,
-                          fontsize=FONT_LEGEND)
+                          fontsize=font_legend)
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0., 
                           title=title,
-                          fontsize=FONT_LEGEND)
+                          fontsize=font_legend)
         axs[i].set_yscale('log')
     
         # axs[i].set_ylim([5e-2, None])
@@ -471,88 +542,88 @@ def make_plot(data, opt):
         
         
     # plot magnetic field
-    if opt["plot_mag"]:
+    if plot_mag:
         ax = axs[i]
-        ax.plot(data["mag"].index, data["mag"]['|b|'], label='B', color='k', linewidth=1)
-        ax.plot(data["mag"].index.values, data["mag"]['br'].values, label='Br', color='dodgerblue')
-        ax.plot(data["mag"].index.values, data["mag"]['bt'].values, label='Bt', color='limegreen')
-        ax.plot(data["mag"].index.values, data["mag"]['bn'].values, label='Bn', color='deeppink')
+        ax.plot(mag.index, mag['|b|'], label='B', color='k', linewidth=1)
+        ax.plot(mag.index.values, mag['br'].values, label='Br', color='dodgerblue')
+        ax.plot(mag.index.values, mag['bt'].values, label='Bt', color='limegreen')
+        ax.plot(mag.index.values, mag['bn'].values, label='Bn', color='deeppink')
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
-        if opt["legends_inside"]:
+        if legends_inside:
             ax.legend(loc='upper right')
         else:
             # ax.legend(loc='upper right', bbox_to_anchor=(1.01, 0.5))
             ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left')
             
-        ax.set_ylabel('B [nT]', fontsize=FONT_YLABEL)
+        ax.set_ylabel('B [nT]', fontsize=font_ylabel)
         ax.tick_params(axis="x", direction="in", which='both')#, pad=-15)
         i += 1
         
-    if opt["plot_polarity"]:
-        pos = get_horizons_coord(f'PSP', time={'start':data["mag"].index[0]-pd.Timedelta(minutes=15), 'stop':data["mag"].index[-1]+pd.Timedelta(minutes=15), 'step':"1min"})  # (lon, lat, radius) in (deg, deg, AU)
+    if plot_polarity:
+        pos = get_horizons_coord(f'PSP', time={'start':mag.index[0]-pd.Timedelta(minutes=15), 'stop':mag.index[-1]+pd.Timedelta(minutes=15), 'step':"1min"})  # (lon, lat, radius) in (deg, deg, AU)
         pos = pos.transform_to(frames.HeliographicStonyhurst())
         #Interpolate position data to magnetic field data cadence
-        r = np.interp([t.timestamp() for t in data["mag"].index], [t.timestamp() for t in pd.to_datetime(pos.obstime.value)], pos.radius.value)
-        lat = np.interp([t.timestamp() for t in data["mag"].index], [t.timestamp() for t in pd.to_datetime(pos.obstime.value)], pos.lat.value)
-        pol, phi_relative = polarity_rtn(data["mag"]['br'].values, data["mag"]['bt'].values, data["mag"]['bn'].values, r, lat, V=400)
+        r = np.interp([t.timestamp() for t in mag.index], [t.timestamp() for t in pd.to_datetime(pos.obstime.value)], pos.radius.value)
+        lat = np.interp([t.timestamp() for t in mag.index], [t.timestamp() for t in pd.to_datetime(pos.obstime.value)], pos.lat.value)
+        pol, phi_relative = polarity_rtn(mag['br'].values, mag['bt'].values, mag['bn'].values, r, lat, V=400)
         # create an inset axe in the current axe:
         pol_ax = inset_axes(ax, height="5%", width="100%", loc='upper center', bbox_to_anchor=(0.,0,1,1.1), bbox_transform=ax.transAxes) # center, you can check the different codes in plt.legend?
         pol_ax.get_xaxis().set_visible(False)
         pol_ax.get_yaxis().set_visible(False)
         pol_ax.set_ylim(0,1)
-        pol_ax.set_xlim([data["mag"].index.values[0], data["mag"].index.values[-1]])
+        pol_ax.set_xlim([mag.index.values[0], mag.index.values[-1]])
         pol_arr = np.zeros(len(pol))+1
-        timestamp = data["mag"].index.values[2] - data["mag"].index.values[1]
+        timestamp = mag.index.values[2] - mag.index.values[1]
         norm = Normalize(vmin=0, vmax=180, clip=True)
         mapper = cm.ScalarMappable(norm=norm, cmap=cm.bwr)
-        pol_ax.bar(data["mag"].index.values[(phi_relative>=0) & (phi_relative<180)],pol_arr[(phi_relative>=0) & (phi_relative<180)],color=mapper.to_rgba(phi_relative[(phi_relative>=0) & (phi_relative<180)]),width=timestamp)
-        pol_ax.bar(data["mag"].index.values[(phi_relative>=180) & (phi_relative<360)],pol_arr[(phi_relative>=180) & (phi_relative<360)],color=mapper.to_rgba(np.abs(360-phi_relative[(phi_relative>=180) & (phi_relative<360)])),width=timestamp)
-        pol_ax.set_xlim(opt["startdate"], opt["enddate"])
+        pol_ax.bar(mag.index.values[(phi_relative>=0) & (phi_relative<180)],pol_arr[(phi_relative>=0) & (phi_relative<180)],color=mapper.to_rgba(phi_relative[(phi_relative>=0) & (phi_relative<180)]),width=timestamp)
+        pol_ax.bar(mag.index.values[(phi_relative>=180) & (phi_relative<360)],pol_arr[(phi_relative>=180) & (phi_relative<360)],color=mapper.to_rgba(np.abs(360-phi_relative[(phi_relative>=180) & (phi_relative<360)])),width=timestamp)
+        pol_ax.set_xlim(startdate, enddate)
         
-    if opt["plot_mag_angles"]:
+    if plot_mag_angles:
         ax = axs[i]
         #Bmag = np.sqrt(np.nansum((mag_data.B_r.values**2,mag_data.B_t.values**2,mag_data.B_n.values**2), axis=0))    
-        # alpha, phi = mag_angles(data["mag"].BFIELD_3, data["mag"].BFIELD_0.values, data["mag"].BFIELD_1.values,
-        #                         data["mag"].BFIELD_2.values)
-        ax.plot(data["mag"].index, data["mag"]['theta'], '.k', label='theta', ms=1)
+        # alpha, phi = mag_angles(mag.BFIELD_3, mag.BFIELD_0.values, mag.BFIELD_1.values,
+        #                         mag.BFIELD_2.values)
+        ax.plot(mag.index, mag['theta'], '.k', label='theta', ms=1)
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
         ax.set_ylim(-90, 90)
-        ax.set_ylabel(r"$\Theta_\mathrm{B}$ [°]", fontsize=FONT_YLABEL)
+        ax.set_ylabel(r"$\Theta_\mathrm{B}$ [°]", fontsize=font_ylabel)
         ax.tick_params(axis="x",direction="in", pad=-15)
     
         i += 1
         ax = axs[i]
-        # ax.plot(data["mag"].index, data["mag"]['phi'], '.k', label='phi', ms=1)
-        ax.plot(data["mag"].index, data["mag"]['phi_mod'], '.k', label='phi', ms=1)
-        # ax.plot(data["mag"].index, data["mag"]['phi2'], '.r', label='phi', ms=1)    
+        # ax.plot(mag.index, mag['phi'], '.k', label='phi', ms=1)
+        ax.plot(mag.index, mag['phi_mod'], '.k', label='phi', ms=1)
+        # ax.plot(mag.index, mag['phi2'], '.r', label='phi', ms=1)    
         ax.axhline(y=0, color='gray', linewidth=0.8, linestyle='--')
         ax.set_ylim(-180, 180)
-        ax.set_ylabel(r"$\Phi_\mathrm{B}$ [°]", fontsize=FONT_YLABEL)
+        ax.set_ylabel(r"$\Phi_\mathrm{B}$ [°]", fontsize=font_ylabel)
         ax.tick_params(axis="x",direction="in", which='both', pad=-15)
         i += 1
         
     ### Temperature
-    if opt["plot_T"]:
-        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['T_K'], '-k', label="SPAN-i")
-        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['T'], '-r', label="SPC")
-        axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=FONT_YLABEL)
+    if plot_T:
+        axs[i].plot(df_magplas_spani.index, df_magplas_spani['T_K'], '-k', label="SPAN-i")
+        axs[i].plot(df_magplas_spc.index, df_magplas_spc['T'], '-r', label="SPC")
+        axs[i].set_ylabel(r"T$_\mathrm{p}$ [K]", fontsize=font_ylabel)
         axs[i].set_yscale('log')
     
         # TODO: manually set lower boundary, remove at some point
-        axs[i].set_ylim(np.nanmin(data["df_magplas_spc"]['T'])-0.1*np.nanmin(data["df_magplas_spc"]['T']), None)
+        axs[i].set_ylim(np.nanmin(df_magplas_spc['T'])-0.1*np.nanmin(df_magplas_spc['T']), None)
     
-        if opt["legends_inside"]:
+        if legends_inside:
             axs[i].legend(loc='upper right')
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left')
         i += 1
     
     ### Dynamic pressure
-    if opt["plot_p_dyn"]:
-        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['p_dyn'], '-k', label="SPAN-i")
-        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['p_dyn'], '-r', label="SPC")
-        axs[i].set_ylabel(r"P$_\mathrm{dyn}$ [nPa]", fontsize=FONT_YLABEL)
-        if opt["legends_inside"]:
+    if plot_p_dyn:
+        axs[i].plot(df_magplas_spani.index, df_magplas_spani['p_dyn'], '-k', label="SPAN-i")
+        axs[i].plot(df_magplas_spc.index, df_magplas_spc['p_dyn'], '-r', label="SPC")
+        axs[i].set_ylabel(r"P$_\mathrm{dyn}$ [nPa]", fontsize=font_ylabel)
+        if legends_inside:
             axs[i].legend(loc='upper right')
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left')
@@ -560,11 +631,11 @@ def make_plot(data, opt):
         i += 1
     
     ### Density
-    if opt["plot_N"]:
-        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['Density'], '-k', label="SPAN-i")
-        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['np_tot'], '-r', label="SPC")
-        axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=FONT_YLABEL)
-        if opt["legends_inside"]:
+    if plot_N:
+        axs[i].plot(df_magplas_spani.index, df_magplas_spani['Density'], '-k', label="SPAN-i")
+        axs[i].plot(df_magplas_spc.index, df_magplas_spc['np_tot'], '-r', label="SPC")
+        axs[i].set_ylabel(r"N$_\mathrm{p}$ [cm$^{-3}$]", fontsize=font_ylabel)
+        if legends_inside:
             axs[i].legend(loc='upper right')
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left')
@@ -572,11 +643,11 @@ def make_plot(data, opt):
         i += 1
     
     ### Vsw
-    if opt["plot_Vsw"]:
-        axs[i].plot(data["df_magplas_spani"].index, data["df_magplas_spani"]['V_tot_rtn'], '-k', label="SPAN-i")
-        axs[i].plot(data["df_magplas_spc"].index, data["df_magplas_spc"]['|vp_tot|'], '-r', label="SPC")
-        axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=FONT_YLABEL)
-        if opt["legends_inside"]:
+    if plot_Vsw:
+        axs[i].plot(df_magplas_spani.index, df_magplas_spani['V_tot_rtn'], '-k', label="SPAN-i")
+        axs[i].plot(df_magplas_spc.index, df_magplas_spc['|vp_tot|'], '-r', label="SPC")
+        axs[i].set_ylabel(r"V$_\mathrm{sw}$ [kms$^{-1}$]", fontsize=font_ylabel)
+        if legends_inside:
             axs[i].legend(loc='upper right')
         else:
             axs[i].legend(bbox_to_anchor=(1.01, 1), loc='upper left')
@@ -587,13 +658,13 @@ def make_plot(data, opt):
     axs[0].set_title(f'Parker Solar Probe', ha='center')
     axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%b %d'))
     axs[-1].xaxis.set_tick_params(rotation=0)
-    axs[-1].set_xlabel(f"Time (UTC) / Date in {opt["startdate"].year}")#, fontsize=15)
-    axs[-1].set_xlim(opt["startdate"], opt["enddate"])
+    axs[-1].set_xlabel(f"Time (UTC) / Date in {startdate.year}")#, fontsize=15)
+    axs[-1].set_xlim(startdate, enddate)
     
     #plt.tight_layout()
     fig.patch.set_facecolor('white')
     fig.set_dpi(200)
     plt.show()
-
+    return fig, axs
 
     

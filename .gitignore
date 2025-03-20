@@ -3,6 +3,7 @@ soler/*.txt
 soler/__pycache__
 soler/test.*
 soler/*.cdf
+soler/.ipynb_checkpoints
 
 *.png
 *.txt
